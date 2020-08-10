@@ -21,6 +21,7 @@ import {
 import { toDataQueryError } from '@grafana/runtime';
 import { emitDataRequestEvent } from './analyticsProcessor';
 import { ExpressionDatasourceID, expressionDatasource } from 'app/features/expressions/ExpressionDatasource';
+import { ExpressionQuery } from 'app/features/expressions/types';
 
 type MapOfResponsePackets = { [str: string]: DataQueryResponse };
 
@@ -33,7 +34,7 @@ interface RunningQueryState {
  * This function should handle composing a PanelData from multiple responses
  */
 export function processResponsePacket(packet: DataQueryResponse, state: RunningQueryState): RunningQueryState {
-  const request = state.panelData.request;
+  const request = state.panelData.request!;
   const packets: MapOfResponsePackets = {
     ...state.packets,
   };
@@ -47,8 +48,8 @@ export function processResponsePacket(packet: DataQueryResponse, state: RunningQ
   const range = { ...request.range };
   const timeRange = isString(range.raw.from)
     ? {
-        from: dateMath.parse(range.raw.from, false),
-        to: dateMath.parse(range.raw.to, true),
+        from: dateMath.parse(range.raw.from, false)!,
+        to: dateMath.parse(range.raw.to, true)!,
         raw: range.raw,
       }
     : range;
@@ -114,13 +115,14 @@ export function runRequest(datasource: DataSourceApi, request: DataQueryRequest)
       return state.panelData;
     }),
     // handle errors
-    catchError(err =>
-      of({
+    catchError(err => {
+      console.error('runRequest.catchError', err);
+      return of({
         ...state.panelData,
         state: LoadingState.Error,
         error: toDataQueryError(err),
-      })
-    ),
+      });
+    }),
     tap(emitDataRequestEvent(datasource)),
     // finalize is triggered when subscriber unsubscribes
     // This makes sure any still running network requests are cancelled
@@ -145,7 +147,7 @@ export function callQueryMethod(datasource: DataSourceApi, request: DataQueryReq
   // If any query has an expression, use the expression endpoint
   for (const target of request.targets) {
     if (target.datasource === ExpressionDatasourceID) {
-      return expressionDatasource.query(request);
+      return expressionDatasource.query(request as DataQueryRequest<ExpressionQuery>);
     }
   }
 
@@ -155,7 +157,7 @@ export function callQueryMethod(datasource: DataSourceApi, request: DataQueryReq
 }
 
 /**
- * All panels will be passed tables that have our best guess at colum type set
+ * All panels will be passed tables that have our best guess at column type set
  *
  * This is also used by PanelChrome for snapshot support
  */
@@ -169,9 +171,11 @@ export function getProcessedDataFrames(results?: DataQueryResponseData[]): DataF
   for (const result of results) {
     const dataFrame = guessFieldTypes(toDataFrame(result));
 
-    // clear out the cached info
-    for (const field of dataFrame.fields) {
-      field.state = null;
+    if (dataFrame.fields && dataFrame.fields.length) {
+      // clear out the cached info
+      for (const field of dataFrame.fields) {
+        field.state = null;
+      }
     }
 
     dataFrames.push(dataFrame);
@@ -180,7 +184,7 @@ export function getProcessedDataFrames(results?: DataQueryResponseData[]): DataF
   return dataFrames;
 }
 
-export function preProcessPanelData(data: PanelData, lastResult: PanelData): PanelData {
+export function preProcessPanelData(data: PanelData, lastResult?: PanelData): PanelData {
   const { series } = data;
 
   //  for loading states with no data, use last result
@@ -189,7 +193,11 @@ export function preProcessPanelData(data: PanelData, lastResult: PanelData): Pan
       lastResult = data;
     }
 
-    return { ...lastResult, state: LoadingState.Loading };
+    return {
+      ...lastResult,
+      state: LoadingState.Loading,
+      request: data.request,
+    };
   }
 
   // Make sure the data frames are properly formatted

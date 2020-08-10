@@ -11,13 +11,13 @@ import {
 } from '@grafana/ui';
 import {
   DataTransformerConfig,
-  FeatureState,
   GrafanaTheme,
   SelectableValue,
   standardTransformersRegistry,
   transformDataFrame,
   DataFrame,
   PanelData,
+  DocsId,
 } from '@grafana/data';
 import { TransformationOperationRow } from './TransformationOperationRow';
 import { Card, CardProps } from '../../../../core/components/Card/Card';
@@ -25,19 +25,28 @@ import { css } from 'emotion';
 import { selectors } from '@grafana/e2e-selectors';
 import { Unsubscribable } from 'rxjs';
 import { PanelModel } from '../../state';
+import { getDocsLink } from 'app/core/utils/docsLinks';
 
 interface Props {
   panel: PanelModel;
-  onChange: (transformations: DataTransformerConfig[]) => void;
-  transformations: DataTransformerConfig[];
 }
 
 interface State {
-  data?: DataFrame[];
+  data: DataFrame[];
+  transformations: DataTransformerConfig[];
 }
 
 export class TransformationsEditor extends React.PureComponent<Props, State> {
   subscription?: Unsubscribable;
+
+  constructor(props: Props) {
+    super(props);
+
+    this.state = {
+      transformations: props.panel.transformations || [],
+      data: [],
+    };
+  }
 
   componentDidMount() {
     this.subscription = this.props.panel
@@ -54,9 +63,15 @@ export class TransformationsEditor extends React.PureComponent<Props, State> {
     }
   }
 
+  onChange(transformations: DataTransformerConfig[]) {
+    this.props.panel.setTransformations(transformations);
+    this.setState({ transformations });
+  }
+
   onTransformationAdd = (selectable: SelectableValue<string>) => {
-    const { transformations, onChange } = this.props;
-    onChange([
+    const { transformations } = this.state;
+
+    this.onChange([
       ...transformations,
       {
         id: selectable.value as string,
@@ -66,17 +81,17 @@ export class TransformationsEditor extends React.PureComponent<Props, State> {
   };
 
   onTransformationChange = (idx: number, config: DataTransformerConfig) => {
-    const { transformations, onChange } = this.props;
+    const { transformations } = this.state;
     const next = Array.from(transformations);
     next[idx] = config;
-    onChange(next);
+    this.onChange(next);
   };
 
   onTransformationRemove = (idx: number) => {
-    const { transformations, onChange } = this.props;
+    const { transformations } = this.state;
     const next = Array.from(transformations);
     next.splice(idx, 1);
-    onChange(next);
+    this.onChange(next);
   };
 
   renderTransformationSelector = () => {
@@ -108,10 +123,7 @@ export class TransformationsEditor extends React.PureComponent<Props, State> {
   };
 
   renderTransformationEditors = () => {
-    const { transformations } = this.props;
-    const { data } = this.state;
-
-    const preTransformData = data ?? [];
+    const { data, transformations } = this.state;
 
     return (
       <>
@@ -123,7 +135,7 @@ export class TransformationsEditor extends React.PureComponent<Props, State> {
             return null;
           }
 
-          const input = transformDataFrame(transformations.slice(0, i), preTransformData);
+          const input = transformDataFrame(transformations.slice(0, i), data);
           const output = transformDataFrame(transformations.slice(i), input);
 
           if (transformationUI) {
@@ -159,11 +171,7 @@ export class TransformationsEditor extends React.PureComponent<Props, State> {
     return (
       <VerticalGroup spacing={'lg'}>
         <Container grow={1}>
-          <FeatureInfoBox
-            title="Transformations"
-            featureState={FeatureState.beta}
-            // url={getDocsLink(DocsId.Transformations)}
-          >
+          <FeatureInfoBox title="Transformations" url={getDocsLink(DocsId.Transformations)}>
             <p>
               Transformations allow you to join, calculate, re-order, hide and rename your query results before being
               visualized. <br />
@@ -171,7 +179,6 @@ export class TransformationsEditor extends React.PureComponent<Props, State> {
               time series. <br />
               It can help to switch to Table visualization to understand what a transformation is doing. <br />
             </p>
-            <p>Select one of the transformations below to start.</p>
           </FeatureInfoBox>
         </Container>
         <VerticalGroup>
@@ -182,6 +189,7 @@ export class TransformationsEditor extends React.PureComponent<Props, State> {
                 title={t.name}
                 description={t.description}
                 actions={<Button>Select</Button>}
+                ariaLabel={selectors.components.TransformTab.newTransform(t.name)}
                 onClick={() => {
                   this.onTransformationAdd({ value: t.id });
                 }}
@@ -194,14 +202,17 @@ export class TransformationsEditor extends React.PureComponent<Props, State> {
   }
 
   render() {
-    const hasTransformationsConfigured = this.props.transformations.length > 0;
+    const { transformations } = this.state;
+
+    const hasTransforms = transformations.length > 0;
+
     return (
       <CustomScrollbar autoHeightMin="100%">
         <Container padding="md">
           <div aria-label={selectors.components.TransformTab.content}>
-            {!hasTransformationsConfigured && this.renderNoAddedTransformsState()}
-            {hasTransformationsConfigured && this.renderTransformationEditors()}
-            {hasTransformationsConfigured && this.renderTransformationSelector()}
+            {!hasTransforms && this.renderNoAddedTransformsState()}
+            {hasTransforms && this.renderTransformationEditors()}
+            {hasTransforms && this.renderTransformationSelector()}
           </div>
         </Container>
       </CustomScrollbar>
