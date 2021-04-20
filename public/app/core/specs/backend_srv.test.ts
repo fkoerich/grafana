@@ -1,13 +1,14 @@
 import 'whatwg-fetch'; // fetch polyfill needed for PhantomJs rendering
 import { Observable, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
-import { AppEvents } from '@grafana/data';
+import { AppEvents, DataQueryErrorType, EventBusExtended } from '@grafana/data';
 
 import { BackendSrv } from '../services/backend_srv';
-import { Emitter } from '../utils/emitter';
 import { ContextSrv, User } from '../services/context_srv';
 import { describe, expect } from '../../../test/lib/common';
 import { BackendSrvRequest, FetchError } from '@grafana/runtime';
+import { TokenRevokedModal } from '../../features/users/TokenRevokedModal';
+import { ShowModalReactEvent } from '../../types/events';
 
 const getTestContext = (overides?: object) => {
   const defaults = {
@@ -35,9 +36,12 @@ const getTestContext = (overides?: object) => {
     };
     return of(mockedResponse);
   });
-  const appEventsMock: Emitter = ({
+
+  const appEventsMock: EventBusExtended = ({
     emit: jest.fn(),
-  } as any) as Emitter;
+    publish: jest.fn(),
+  } as any) as EventBusExtended;
+
   const user: User = ({
     isSignedIn: props.isSignedIn,
     orgId: props.orgId,
@@ -46,7 +50,7 @@ const getTestContext = (overides?: object) => {
     user,
   } as any) as ContextSrv;
   const logoutMock = jest.fn();
-  const parseRequestOptionsMock = jest.fn().mockImplementation(options => options);
+  const parseRequestOptionsMock = jest.fn().mockImplementation((options) => options);
 
   const backendSrv = new BackendSrv({
     fromFetch: fromFetchMock,
@@ -83,21 +87,22 @@ describe('backendSrv', () => {
   describe('parseRequestOptions', () => {
     it.each`
       retry        | url                                      | headers                           | orgId        | noBackendCache | expected
-      ${undefined} | ${'http://localhost:3000/api/dashboard'} | ${undefined}                      | ${undefined} | ${undefined}   | ${{ retry: 0, url: 'http://localhost:3000/api/dashboard' }}
-      ${1}         | ${'http://localhost:3000/api/dashboard'} | ${{ Authorization: 'Some Auth' }} | ${1}         | ${true}        | ${{ retry: 1, url: 'http://localhost:3000/api/dashboard', headers: { Authorization: 'Some Auth' } }}
-      ${undefined} | ${'api/dashboard'}                       | ${undefined}                      | ${undefined} | ${undefined}   | ${{ retry: 0, url: 'api/dashboard' }}
-      ${undefined} | ${'/api/dashboard'}                      | ${undefined}                      | ${undefined} | ${undefined}   | ${{ retry: 0, url: 'api/dashboard' }}
-      ${undefined} | ${'/api/dashboard/'}                     | ${undefined}                      | ${undefined} | ${undefined}   | ${{ retry: 0, url: 'api/dashboard/' }}
-      ${undefined} | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${undefined} | ${undefined}   | ${{ retry: 0, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth' } }}
-      ${undefined} | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${1}         | ${undefined}   | ${{ retry: 0, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth', 'X-Grafana-Org-Id': 1 } }}
-      ${undefined} | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${1}         | ${true}        | ${{ retry: 0, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth', 'X-Grafana-Org-Id': 1, 'X-Grafana-NoCache': 'true' } }}
-      ${1}         | ${'/api/dashboard/'}                     | ${undefined}                      | ${undefined} | ${undefined}   | ${{ retry: 1, url: 'api/dashboard/' }}
-      ${1}         | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${undefined} | ${undefined}   | ${{ retry: 1, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth' } }}
-      ${1}         | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${1}         | ${undefined}   | ${{ retry: 1, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth', 'X-Grafana-Org-Id': 1 } }}
-      ${1}         | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${1}         | ${true}        | ${{ retry: 1, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth', 'X-Grafana-Org-Id': 1, 'X-Grafana-NoCache': 'true' } }}
+      ${undefined} | ${'http://localhost:3000/api/dashboard'} | ${undefined}                      | ${undefined} | ${undefined}   | ${{ hideFromInspector: false, retry: 0, url: 'http://localhost:3000/api/dashboard' }}
+      ${1}         | ${'http://localhost:3000/api/dashboard'} | ${{ Authorization: 'Some Auth' }} | ${1}         | ${true}        | ${{ hideFromInspector: false, retry: 1, url: 'http://localhost:3000/api/dashboard', headers: { Authorization: 'Some Auth' } }}
+      ${undefined} | ${'api/dashboard'}                       | ${undefined}                      | ${undefined} | ${undefined}   | ${{ hideFromInspector: true, retry: 0, url: 'api/dashboard' }}
+      ${undefined} | ${'/api/dashboard'}                      | ${undefined}                      | ${undefined} | ${undefined}   | ${{ hideFromInspector: true, retry: 0, url: 'api/dashboard' }}
+      ${undefined} | ${'/api/dashboard/'}                     | ${undefined}                      | ${undefined} | ${undefined}   | ${{ hideFromInspector: true, retry: 0, url: 'api/dashboard/' }}
+      ${undefined} | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${undefined} | ${undefined}   | ${{ hideFromInspector: true, retry: 0, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth' } }}
+      ${undefined} | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${1}         | ${undefined}   | ${{ hideFromInspector: true, retry: 0, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth', 'X-Grafana-Org-Id': 1 } }}
+      ${undefined} | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${1}         | ${true}        | ${{ hideFromInspector: true, retry: 0, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth', 'X-Grafana-Org-Id': 1, 'X-Grafana-NoCache': 'true' } }}
+      ${1}         | ${'/api/dashboard/'}                     | ${undefined}                      | ${undefined} | ${undefined}   | ${{ hideFromInspector: true, retry: 1, url: 'api/dashboard/' }}
+      ${1}         | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${undefined} | ${undefined}   | ${{ hideFromInspector: true, retry: 1, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth' } }}
+      ${1}         | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${1}         | ${undefined}   | ${{ hideFromInspector: true, retry: 1, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth', 'X-Grafana-Org-Id': 1 } }}
+      ${1}         | ${'/api/dashboard/'}                     | ${{ Authorization: 'Some Auth' }} | ${1}         | ${true}        | ${{ hideFromInspector: true, retry: 1, url: 'api/dashboard/', headers: { 'X-DS-Authorization': 'Some Auth', 'X-Grafana-Org-Id': 1, 'X-Grafana-NoCache': 'true' } }}
+      ${undefined} | ${'api/datasources/proxy'}               | ${undefined}                      | ${undefined} | ${undefined}   | ${{ hideFromInspector: false, retry: 0, url: 'api/datasources/proxy' }}
     `(
       "when called with retry: '$retry', url: '$url' and orgId: '$orgId' then result should be '$expected'",
-      ({ retry, url, headers, orgId, noBackendCache, expected }) => {
+      async ({ retry, url, headers, orgId, noBackendCache, expected }) => {
         const srv = new BackendSrv({
           contextSrv: {
             user: {
@@ -107,7 +112,7 @@ describe('backendSrv', () => {
         } as any);
 
         if (noBackendCache) {
-          srv.withNoBackendCache(async () => {
+          await srv.withNoBackendCache(async () => {
             expect(srv['parseRequestOptions']({ retry, url, headers })).toEqual(expected);
           });
         } else {
@@ -165,7 +170,7 @@ describe('backendSrv', () => {
 
         await backendSrv
           .request({ url, method: 'GET', retry: 0 })
-          .catch(error => {
+          .catch((error) => {
             expect(error.status).toBe(401);
             expect(error.statusText).toBe('UnAuthorized');
             expect(error.data).toEqual({ message: 'UnAuthorized' });
@@ -175,11 +180,41 @@ describe('backendSrv', () => {
             expectRequestCallChain({ url, method: 'GET', retry: 0 });
             jest.advanceTimersByTime(50);
           })
-          .catch(error => {
+          .catch((error) => {
             expect(error).toEqual({ message: 'UnAuthorized' });
             expect(appEventsMock.emit).toHaveBeenCalledTimes(1);
             expect(appEventsMock.emit).toHaveBeenCalledWith(AppEvents.alertWarning, ['UnAuthorized', '']);
           });
+      });
+    });
+
+    describe('when making an unsuccessful call because of soft token revocation', () => {
+      it('then it should dispatch show Token Revoked modal event', async () => {
+        const url = '/api/dashboard/';
+        const { backendSrv, appEventsMock, logoutMock, expectRequestCallChain } = getTestContext({
+          ok: false,
+          status: 401,
+          statusText: 'UnAuthorized',
+          data: { message: 'Token revoked', error: { id: 'ERR_TOKEN_REVOKED', maxConcurrentSessions: 3 } },
+          url,
+        });
+
+        backendSrv.loginPing = jest.fn();
+
+        await backendSrv.request({ url, method: 'GET', retry: 0 }).catch(() => {
+          expect(appEventsMock.publish).toHaveBeenCalledTimes(1);
+          expect(appEventsMock.publish).toHaveBeenCalledWith(
+            new ShowModalReactEvent({
+              component: TokenRevokedModal,
+              props: {
+                maxConcurrentSessions: 3,
+              },
+            })
+          );
+          expect(backendSrv.loginPing).not.toHaveBeenCalled();
+          expect(logoutMock).not.toHaveBeenCalled();
+          expectRequestCallChain({ url, method: 'GET', retry: 0 });
+        });
       });
     });
 
@@ -200,7 +235,7 @@ describe('backendSrv', () => {
 
         await backendSrv
           .request({ url, method: 'GET', retry: 0 })
-          .catch(error => {
+          .catch((error) => {
             expect(error.status).toBe(403);
             expect(error.statusText).toBe('Forbidden');
             expect(error.data).toEqual({ message: 'Forbidden' });
@@ -210,7 +245,7 @@ describe('backendSrv', () => {
             expectRequestCallChain({ url, method: 'GET', retry: 0 });
             jest.advanceTimersByTime(50);
           })
-          .catch(error => {
+          .catch((error) => {
             expect(error).toEqual({ message: 'Forbidden' });
             expect(appEventsMock.emit).toHaveBeenCalledTimes(1);
             expect(appEventsMock.emit).toHaveBeenCalledWith(AppEvents.alertWarning, ['Forbidden', '']);
@@ -251,7 +286,7 @@ describe('backendSrv', () => {
 
         await backendSrv
           .request({ url, method: 'GET' })
-          .catch(error => {
+          .catch((error) => {
             expect(error.status).toBe(422);
             expect(error.statusText).toBe('Unprocessable Entity');
             expect(error.data).toEqual({ message: 'Unprocessable Entity' });
@@ -260,7 +295,7 @@ describe('backendSrv', () => {
             expectRequestCallChain({ url, method: 'GET' });
             jest.advanceTimersByTime(50);
           })
-          .catch(error => {
+          .catch((error) => {
             expect(error).toEqual({ message: 'Unprocessable Entity' });
             expect(appEventsMock.emit).toHaveBeenCalledTimes(1);
             expect(appEventsMock.emit).toHaveBeenCalledWith(AppEvents.alertWarning, [
@@ -282,7 +317,7 @@ describe('backendSrv', () => {
         });
         const url = '/api/dashboard/';
 
-        await backendSrv.request({ url, method: 'GET' }).catch(error => {
+        await backendSrv.request({ url, method: 'GET' }).catch((error) => {
           expect(error.status).toBe(404);
           expect(error.statusText).toBe('Not found');
           expect(error.data).toEqual({ message: 'Not found' });
@@ -298,65 +333,13 @@ describe('backendSrv', () => {
   });
 
   describe('datasourceRequest', () => {
-    describe('when making a successful call and silent is true', () => {
-      it('then it should not emit message', async () => {
-        const url = 'http://localhost:3000/api/some-mock';
-        const { backendSrv, appEventsMock, expectRequestCallChain } = getTestContext({ url });
-        const options = { url, method: 'GET', silent: true };
-        const result = await backendSrv.datasourceRequest(options);
-
-        expect(result).toEqual({
-          data: { test: 'hello world' },
-          ok: true,
-          redirected: false,
-          status: 200,
-          statusText: 'Ok',
-          type: 'basic',
-          url,
-          config: options,
-        });
-
-        expect(appEventsMock.emit).not.toHaveBeenCalled();
-        expectRequestCallChain({ url, method: 'GET', silent: true });
-      });
-    });
-
-    describe('when making a successful call and silent is not defined', () => {
-      it('then it should not emit message', async () => {
-        const url = 'http://localhost:3000/api/some-mock';
-        const { backendSrv, expectRequestCallChain } = getTestContext({ url });
-        const options = { url, method: 'GET' };
-
-        let inspectorPacket: any = null;
-        backendSrv.getInspectorStream().subscribe({
-          next: rsp => (inspectorPacket = rsp),
-        });
-
-        const result = await backendSrv.datasourceRequest(options);
-        const expectedResult = {
-          data: { test: 'hello world' },
-          ok: true,
-          redirected: false,
-          status: 200,
-          statusText: 'Ok',
-          type: 'basic',
-          url,
-          config: options,
-        };
-
-        expect(result).toEqual(expectedResult);
-        expect(inspectorPacket).toEqual(expectedResult);
-        expectRequestCallChain({ url, method: 'GET' });
-      });
-    });
-
     describe('when called with the same requestId twice', () => {
       it('then it should cancel the first call and the first call should be unsubscribed', async () => {
         const url = '/api/dashboard/';
         const { backendSrv, fromFetchMock } = getTestContext({ url });
         const unsubscribe = jest.fn();
         const slowData = { message: 'Slow Request' };
-        const slowFetch = new Observable(subscriber => {
+        const slowFetch = new Observable((subscriber) => {
           subscriber.next({
             ok: true,
             status: 200,
@@ -390,7 +373,7 @@ describe('backendSrv', () => {
         };
 
         let slowError: any = null;
-        backendSrv.request(options).catch(err => {
+        backendSrv.request(options).catch((err) => {
           slowError = err;
         });
 
@@ -403,6 +386,7 @@ describe('backendSrv', () => {
         expect(unsubscribe).toHaveBeenCalledTimes(1);
 
         expect(slowError).toEqual({
+          type: DataQueryErrorType.Cancelled,
           cancelled: true,
           data: null,
           status: -1,
@@ -428,15 +412,45 @@ describe('backendSrv', () => {
 
         let inspectorPacket: any = null;
         backendSrv.getInspectorStream().subscribe({
-          next: rsp => (inspectorPacket = rsp),
+          next: (rsp) => (inspectorPacket = rsp),
         });
 
-        await backendSrv.datasourceRequest({ url, method: 'GET', retry: 0 }).catch(error => {
+        await backendSrv.datasourceRequest({ url, method: 'GET', retry: 0 }).catch((error) => {
           expect(error.status).toBe(401);
           expect(error.statusText).toBe('UnAuthorized');
           expect(error.data).toEqual({ message: 'UnAuthorized' });
           expect(inspectorPacket).toBe(error);
           expect(backendSrv.loginPing).toHaveBeenCalledTimes(1);
+          expect(logoutMock).not.toHaveBeenCalled();
+          expectRequestCallChain({ url, method: 'GET', retry: 0 });
+        });
+      });
+    });
+
+    describe('when making an unsuccessful call because of soft token revocation', () => {
+      it('then it should dispatch show Token Revoked modal event', async () => {
+        const { backendSrv, logoutMock, appEventsMock, expectRequestCallChain } = getTestContext({
+          ok: false,
+          status: 401,
+          statusText: 'UnAuthorized',
+          data: { message: 'Token revoked', error: { id: 'ERR_TOKEN_REVOKED', maxConcurrentSessions: 3 } },
+        });
+
+        backendSrv.loginPing = jest.fn();
+
+        const url = '/api/dashboard/';
+
+        await backendSrv.datasourceRequest({ url, method: 'GET', retry: 0 }).catch((error) => {
+          expect(appEventsMock.publish).toHaveBeenCalledTimes(1);
+          expect(appEventsMock.publish).toHaveBeenCalledWith(
+            new ShowModalReactEvent({
+              component: TokenRevokedModal,
+              props: {
+                maxConcurrentSessions: 3,
+              },
+            })
+          );
+          expect(backendSrv.loginPing).not.toHaveBeenCalled();
           expect(logoutMock).not.toHaveBeenCalled();
           expectRequestCallChain({ url, method: 'GET', retry: 0 });
         });
@@ -462,7 +476,7 @@ describe('backendSrv', () => {
           .fn()
           .mockRejectedValue({ status: 403, statusText: 'Forbidden', data: { message: 'Forbidden' } });
 
-        await backendSrv.datasourceRequest(options).catch(error => {
+        await backendSrv.datasourceRequest(options).catch((error) => {
           expect(error.status).toBe(403);
           expect(error.statusText).toBe('Forbidden');
           expect(error.data).toEqual({ message: 'Forbidden' });
@@ -487,7 +501,7 @@ describe('backendSrv', () => {
           method: 'GET',
         };
 
-        await backendSrv.datasourceRequest(options).catch(error => {
+        await backendSrv.datasourceRequest(options).catch((error) => {
           expect(error).toEqual({
             status: 500,
             statusText: 'Internal Server Error',
@@ -519,10 +533,10 @@ describe('backendSrv', () => {
 
         let inspectorPacket: any = null;
         backendSrv.getInspectorStream().subscribe({
-          next: rsp => (inspectorPacket = rsp),
+          next: (rsp) => (inspectorPacket = rsp),
         });
 
-        await backendSrv.datasourceRequest(options).catch(error => {
+        await backendSrv.datasourceRequest(options).catch((error) => {
           expect(error).toEqual({
             status: 403,
             statusText: 'Forbidden',
@@ -545,7 +559,7 @@ describe('backendSrv', () => {
       const url = '/api/dashboard/';
 
       const getRequestObservable = (message: string, unsubscribe: any) =>
-        new Observable(subscriber => {
+        new Observable((subscriber) => {
           subscriber.next({
             ok: true,
             status: 200,
@@ -590,7 +604,7 @@ describe('backendSrv', () => {
           catchedError = err;
         }
 
-        expect(catchedError.cancelled).toEqual(true);
+        expect(catchedError.type).toEqual(DataQueryErrorType.Cancelled);
         expect(catchedError.statusText).toEqual('Request was aborted');
         expect(unsubscribe).toHaveBeenCalledTimes(2);
       });

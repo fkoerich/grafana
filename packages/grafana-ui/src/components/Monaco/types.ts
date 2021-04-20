@@ -1,3 +1,5 @@
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
+
 export type CodeEditorChangeHandler = (value: string) => void;
 export type CodeEditorSuggestionProvider = () => CodeEditorSuggestionItem[];
 
@@ -10,11 +12,12 @@ export interface CodeEditorProps {
   readOnly?: boolean;
   showMiniMap?: boolean;
   showLineNumbers?: boolean;
+  monacoOptions?: monaco.editor.IEditorConstructionOptions;
 
   /**
    * Callback after the editor has mounted that gives you raw access to monaco
    *
-   * @experimental - real type is: monaco.editor.IStandaloneCodeEditor
+   * @alpha -- experimental - real type is: monaco.editor.IStandaloneCodeEditor
    */
   onEditorDidMount?: (editor: any) => void;
 

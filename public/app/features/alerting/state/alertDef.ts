@@ -8,7 +8,7 @@ const alertQueryDef = new QueryPartDef({
     {
       name: 'from',
       type: 'string',
-      options: ['10s', '1m', '5m', '10m', '15m', '1h', '24h', '48h'],
+      options: ['10s', '1m', '5m', '10m', '15m', '1h', '2h', '6h', '12h', '24h', '48h'],
     },
     { name: 'to', type: 'string', options: ['now', 'now-1m', 'now-5m', 'now-10m', 'now-1h'] },
   ],
@@ -25,12 +25,20 @@ const alertStateSortScore = {
   paused: 5,
 };
 
+export enum EvalFunction {
+  'IsAbove' = 'gt',
+  'IsBelow' = 'lt',
+  'IsOutsideRange' = 'outside_range',
+  'IsWithinRange' = 'within_range',
+  'HasNoValue' = 'no_value',
+}
+
 const evalFunctions = [
-  { text: 'IS ABOVE', value: 'gt' },
-  { text: 'IS BELOW', value: 'lt' },
-  { text: 'IS OUTSIDE RANGE', value: 'outside_range' },
-  { text: 'IS WITHIN RANGE', value: 'within_range' },
-  { text: 'HAS NO VALUE', value: 'no_value' },
+  { value: EvalFunction.IsAbove, text: 'IS ABOVE' },
+  { value: EvalFunction.IsBelow, text: 'IS BELOW' },
+  { value: EvalFunction.IsOutsideRange, text: 'IS OUTSIDE RANGE' },
+  { value: EvalFunction.IsWithinRange, text: 'IS WITHIN RANGE' },
+  { value: EvalFunction.HasNoValue, text: 'HAS NO VALUE' },
 ];
 
 const evalOperators = [

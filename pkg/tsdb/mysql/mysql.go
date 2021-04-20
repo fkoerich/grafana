@@ -15,20 +15,16 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/models"
-	"github.com/grafana/grafana/pkg/tsdb"
+	"github.com/grafana/grafana/pkg/plugins"
 	"github.com/grafana/grafana/pkg/tsdb/sqleng"
 	"xorm.io/core"
 )
 
-func init() {
-	tsdb.RegisterTsdbQueryEndpoint("mysql", newMysqlQueryEndpoint)
-}
-
 func characterEscape(s string, escapeChar string) string {
-	return strings.Replace(s, escapeChar, url.QueryEscape(escapeChar), -1)
+	return strings.ReplaceAll(s, escapeChar, url.QueryEscape(escapeChar))
 }
 
-func newMysqlQueryEndpoint(datasource *models.DataSource) (tsdb.TsdbQueryEndpoint, error) {
+func NewExecutor(datasource *models.DataSource) (plugins.DataPlugin, error) {
 	logger := log.New("tsdb.mysql")
 
 	protocol := "tcp"
@@ -57,11 +53,11 @@ func newMysqlQueryEndpoint(datasource *models.DataSource) (tsdb.TsdbQueryEndpoin
 		cnnstr += "&tls=" + tlsConfigString
 	}
 
-	if setting.Env == setting.DEV {
+	if setting.Env == setting.Dev {
 		logger.Debug("getEngine", "connection", cnnstr)
 	}
 
-	config := sqleng.SqlQueryEndpointConfiguration{
+	config := sqleng.DataPluginConfiguration{
 		DriverName:        "mysql",
 		ConnectionString:  cnnstr,
 		Datasource:        datasource,
@@ -73,14 +69,15 @@ func newMysqlQueryEndpoint(datasource *models.DataSource) (tsdb.TsdbQueryEndpoin
 		log: logger,
 	}
 
-	return sqleng.NewSqlQueryEndpoint(&config, &rowTransformer, newMysqlMacroEngine(logger), logger)
+	return sqleng.NewDataPlugin(config, &rowTransformer, newMysqlMacroEngine(logger), logger)
 }
 
 type mysqlQueryResultTransformer struct {
 	log log.Logger
 }
 
-func (t *mysqlQueryResultTransformer) TransformQueryResult(columnTypes []*sql.ColumnType, rows *core.Rows) (tsdb.RowValues, error) {
+func (t *mysqlQueryResultTransformer) TransformQueryResult(columnTypes []*sql.ColumnType, rows *core.Rows) (
+	plugins.DataRowValues, error) {
 	values := make([]interface{}, len(columnTypes))
 
 	for i := range values {
@@ -140,8 +137,10 @@ func (t *mysqlQueryResultTransformer) TransformQueryResult(columnTypes []*sql.Co
 }
 
 func (t *mysqlQueryResultTransformer) TransformQueryError(err error) error {
-	if driverErr, ok := err.(*mysql.MySQLError); ok {
-		if driverErr.Number != mysqlerr.ER_PARSE_ERROR && driverErr.Number != mysqlerr.ER_BAD_FIELD_ERROR && driverErr.Number != mysqlerr.ER_NO_SUCH_TABLE {
+	var driverErr *mysql.MySQLError
+	if errors.As(err, &driverErr) {
+		if driverErr.Number != mysqlerr.ER_PARSE_ERROR && driverErr.Number != mysqlerr.ER_BAD_FIELD_ERROR &&
+			driverErr.Number != mysqlerr.ER_NO_SUCH_TABLE {
 			t.log.Error("query error", "err", err)
 			return errQueryFailed
 		}
@@ -150,4 +149,4 @@ func (t *mysqlQueryResultTransformer) TransformQueryError(err error) error {
 	return err
 }
 
-var errQueryFailed = errors.New("Query failed. Please inspect Grafana server log for details")
+var errQueryFailed = errors.New("query failed - please inspect Grafana server log for details")

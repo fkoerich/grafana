@@ -1,7 +1,7 @@
 import config from '../../../core/config';
 import { getBackendSrv } from 'app/core/services/backend_srv';
 import { getDatasourceSrv } from 'app/features/plugins/datasource_srv';
-import { updateLocation, updateNavIndex } from 'app/core/actions';
+import { updateNavIndex } from 'app/core/actions';
 import { buildNavModel } from './navModel';
 import { DataSourcePluginMeta, DataSourceSettings } from '@grafana/data';
 import { DataSourcePluginCategory, ThunkResult, ThunkDispatch } from 'app/types';
@@ -21,7 +21,7 @@ import {
 } from './reducers';
 import { buildCategories } from './buildCategories';
 import { getDataSource, getDataSourceMeta } from './selectors';
-import { getDataSourceSrv } from '@grafana/runtime';
+import { getDataSourceSrv, locationService } from '@grafana/runtime';
 
 export interface DataSourceTypesLoadedPayload {
   plugins: DataSourcePluginMeta[];
@@ -95,29 +95,24 @@ export const testDataSource = (
 
         dispatch(testDataSourceSucceeded(result));
       } catch (err) {
-        let message = '';
+        const { statusText, message: errMessage, details } = err;
+        const message = statusText ? 'HTTP error ' + statusText : errMessage;
 
-        if (err.statusText) {
-          message = 'HTTP Error ' + err.statusText;
-        } else {
-          message = err.message;
-        }
-
-        dispatch(testDataSourceFailed({ message }));
+        dispatch(testDataSourceFailed({ message, details }));
       }
     });
   };
 };
 
 export function loadDataSources(): ThunkResult<void> {
-  return async dispatch => {
+  return async (dispatch) => {
     const response = await getBackendSrv().get('/api/datasources');
     dispatch(dataSourcesLoaded(response));
   };
 }
 
 export function loadDataSource(id: number): ThunkResult<void> {
-  return async dispatch => {
+  return async (dispatch) => {
     const dataSource = (await getBackendSrv().get(`/api/datasources/${id}`)) as DataSourceSettings;
     const pluginInfo = (await getPluginSettings(dataSource.type)) as DataSourcePluginMeta;
     const plugin = await importDataSourcePlugin(pluginInfo);
@@ -146,12 +141,12 @@ export function addDataSource(plugin: DataSourcePluginMeta): ThunkResult<void> {
     }
 
     const result = await getBackendSrv().post('/api/datasources', newInstance);
-    dispatch(updateLocation({ path: `/datasources/edit/${result.id}` }));
+    locationService.push(`/datasources/edit/${result.id}`);
   };
 }
 
 export function loadDataSourcePlugins(): ThunkResult<void> {
-  return async dispatch => {
+  return async (dispatch) => {
     dispatch(dataSourcePluginsLoad());
     const plugins = await getBackendSrv().get('/api/plugins', { enabled: 1, type: 'datasource' });
     const categories = buildCategories(plugins);
@@ -160,7 +155,7 @@ export function loadDataSourcePlugins(): ThunkResult<void> {
 }
 
 export function updateDataSource(dataSource: DataSourceSettings): ThunkResult<void> {
-  return async dispatch => {
+  return async (dispatch) => {
     await getBackendSrv().put(`/api/datasources/${dataSource.id}`, dataSource);
     await updateFrontendSettings();
     return dispatch(loadDataSource(dataSource.id));
@@ -170,9 +165,11 @@ export function updateDataSource(dataSource: DataSourceSettings): ThunkResult<vo
 export function deleteDataSource(): ThunkResult<void> {
   return async (dispatch, getStore) => {
     const dataSource = getStore().dataSources.dataSource;
+
     await getBackendSrv().delete(`/api/datasources/${dataSource.id}`);
     await updateFrontendSettings();
-    dispatch(updateLocation({ path: '/datasources' }));
+
+    locationService.push('/datasources');
   };
 }
 
@@ -182,7 +179,7 @@ interface ItemWithName {
 
 export function nameExits(dataSources: ItemWithName[], name: string) {
   return (
-    dataSources.filter(dataSource => {
+    dataSources.filter((dataSource) => {
       return dataSource.name.toLowerCase() === name.toLowerCase();
     }).length > 0
   );
@@ -214,7 +211,7 @@ function updateFrontendSettings() {
     .then((settings: any) => {
       config.datasources = settings.datasources;
       config.defaultDatasource = settings.defaultDatasource;
-      getDatasourceSrv().init();
+      getDatasourceSrv().init(config.datasources, settings.defaultDatasource);
     });
 }
 

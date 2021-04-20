@@ -2,6 +2,7 @@ import { getFieldDisplayValuesProxy } from './getFieldDisplayValuesProxy';
 import { applyFieldOverrides } from './fieldOverrides';
 import { toDataFrame } from '../dataframe';
 import { GrafanaTheme } from '../types';
+import { getTestTheme } from '../utils/testdata/testTheme';
 
 describe('getFieldDisplayValuesProxy', () => {
   const data = applyFieldOverrides({
@@ -12,6 +13,9 @@ describe('getFieldDisplayValuesProxy', () => {
           {
             name: 'power',
             values: [100, 200, 300],
+            labels: {
+              name: 'POWAH!',
+            },
             config: {
               displayName: 'The Power',
             },
@@ -28,10 +32,8 @@ describe('getFieldDisplayValuesProxy', () => {
       overrides: [],
     },
     replaceVariables: (val: string) => val,
-    getDataSourceSettingsByUid: (val: string) => ({} as any),
     timeZone: 'utc',
-    theme: {} as GrafanaTheme,
-    autoMinMax: true,
+    theme: getTestTheme(),
   })[0];
 
   it('should define all display functions', () => {
@@ -61,6 +63,7 @@ describe('getFieldDisplayValuesProxy', () => {
     });
     expect(p.power.numeric).toEqual(300);
     expect(p['power'].numeric).toEqual(300);
+    expect(p['POWAH!'].numeric).toEqual(300);
     expect(p['The Power'].numeric).toEqual(300);
     expect(p[1].numeric).toEqual(300);
   });

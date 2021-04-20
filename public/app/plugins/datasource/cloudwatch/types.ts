@@ -1,7 +1,8 @@
-import { DataQuery, SelectableValue, DataSourceJsonData } from '@grafana/data';
+import { DataQuery, SelectableValue } from '@grafana/data';
+import { AwsAuthDataSourceSecureJsonData, AwsAuthDataSourceJsonData } from '@grafana/aws-sdk';
 
 export interface CloudWatchMetricsQuery extends DataQuery {
-  queryMode: 'Metrics';
+  queryMode?: 'Metrics';
 
   id: string;
   region: string;
@@ -30,6 +31,7 @@ export enum CloudWatchLogsQueryStatus {
   Complete = 'Complete',
   Failed = 'Failed',
   Cancelled = 'Cancelled',
+  Timeout = 'Timeout',
 }
 
 export interface CloudWatchLogsQuery extends DataQuery {
@@ -44,6 +46,9 @@ export interface CloudWatchLogsQuery extends DataQuery {
 
 export type CloudWatchQuery = CloudWatchMetricsQuery | CloudWatchLogsQuery;
 
+export const isCloudWatchLogsQuery = (cloudwatchQuery: CloudWatchQuery): cloudwatchQuery is CloudWatchLogsQuery =>
+  (cloudwatchQuery as CloudWatchLogsQuery).queryMode === 'Logs';
+
 export interface AnnotationQuery extends CloudWatchMetricsQuery {
   prefixMatching: boolean;
   actionPrefix: string;
@@ -52,15 +57,14 @@ export interface AnnotationQuery extends CloudWatchMetricsQuery {
 
 export type SelectableStrings = Array<SelectableValue<string>>;
 
-export interface CloudWatchJsonData extends DataSourceJsonData {
+export interface CloudWatchJsonData extends AwsAuthDataSourceJsonData {
   timeField?: string;
-  assumeRoleArn?: string;
-  externalId?: string;
   database?: string;
   customMetricsNamespaces?: string;
+  endpoint?: string;
 }
 
-export interface CloudWatchSecureJsonData {
+export interface CloudWatchSecureJsonData extends AwsAuthDataSourceSecureJsonData {
   accessKey: string;
   secretKey: string;
 }
@@ -172,7 +176,6 @@ export interface TSDBQueryResult<T = any> {
   refId: string;
   series: TSDBTimeSeries[];
   tables: Array<TSDBTable<T>>;
-  dataframes: number[][];
 
   error?: string;
   meta?: any;

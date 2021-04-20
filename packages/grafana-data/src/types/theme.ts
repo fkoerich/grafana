@@ -1,3 +1,5 @@
+import { GrafanaThemeV2 } from '../themes/createTheme';
+
 export enum GrafanaThemeType {
   Light = 'light',
   Dark = 'dark',
@@ -53,6 +55,7 @@ export interface GrafanaThemeCommons {
     };
   };
   spacing: {
+    base: number;
     insetSquishMd: string;
     d: string;
     xxs: string;
@@ -110,6 +113,7 @@ export interface GrafanaThemeCommons {
 }
 
 export interface GrafanaTheme extends GrafanaThemeCommons {
+  v2: GrafanaThemeV2;
   type: GrafanaThemeType;
   isDark: boolean;
   isLight: boolean;
@@ -136,7 +140,9 @@ export interface GrafanaTheme extends GrafanaThemeCommons {
 
     // New greys palette used by next-gen form elements
     gray98: string;
+    gray97: string;
     gray95: string;
+    gray90: string;
     gray85: string;
     gray70: string;
     gray60: string;

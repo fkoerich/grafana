@@ -7,9 +7,7 @@ exports[`Render should render component 1`] = `
   <div
     className="gf-form gf-form--grow"
   >
-    <Component
-      inputClassName="gf-form-input width-20"
-      labelClassName="gf-form--has-input-icon"
+    <FilterInput
       onChange={[MockFunction]}
       placeholder="Search user by login, email or name"
       value=""
@@ -28,9 +26,7 @@ exports[`Render should render pending invites button 1`] = `
   <div
     className="gf-form gf-form--grow"
   >
-    <Component
-      inputClassName="gf-form-input width-20"
-      labelClassName="gf-form--has-input-icon"
+    <FilterInput
       onChange={[MockFunction]}
       placeholder="Search user by login, email or name"
       value=""
@@ -73,9 +69,7 @@ exports[`Render should show external user management button 1`] = `
   <div
     className="gf-form gf-form--grow"
   >
-    <Component
-      inputClassName="gf-form-input width-20"
-      labelClassName="gf-form--has-input-icon"
+    <FilterInput
       onChange={[MockFunction]}
       placeholder="Search user by login, email or name"
       value=""
@@ -99,9 +93,7 @@ exports[`Render should show invite button 1`] = `
   <div
     className="gf-form gf-form--grow"
   >
-    <Component
-      inputClassName="gf-form-input width-20"
-      labelClassName="gf-form--has-input-icon"
+    <FilterInput
       onChange={[MockFunction]}
       placeholder="Search user by login, email or name"
       value=""

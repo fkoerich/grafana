@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/data"
-	"github.com/influxdata/influxdb-client-go/api/query"
+	"github.com/grafana/grafana-plugin-sdk-go/data/converters"
+	"github.com/influxdata/influxdb-client-go/v2/api/query"
 )
 
 // Copied from: (Apache 2 license)
@@ -27,62 +28,86 @@ type columnInfo struct {
 	converter *data.FieldConverter
 }
 
-// FrameBuilder This is an interface to help testing
-type FrameBuilder struct {
-	tableID      int64
-	active       *data.Frame
-	frames       []*data.Frame
-	value        *data.FieldConverter
-	columns      []columnInfo
-	labels       []string
-	maxPoints    int // max points in a series
-	maxSeries    int // max number of series
-	totalSeries  int
-	isTimeSeries bool
-	timeColumn   string // sometimes it is not `_time`
-	timeDisplay  string
+// frameBuilder is an interface to help testing.
+type frameBuilder struct {
+	currentGroupKey     []interface{}
+	groupKeyColumnNames []string
+	active              *data.Frame
+	frames              []*data.Frame
+	value               *data.FieldConverter
+	columns             []columnInfo
+	labels              []string
+	maxPoints           int // max points in a series
+	maxSeries           int // max number of series
+	totalSeries         int
+	isTimeSeries        bool
+	timeColumn          string // sometimes it is not `_time`
+	timeDisplay         string
 }
 
 func isTag(schk string) bool {
 	return (schk != "result" && schk != "table" && schk[0] != '_')
 }
 
+var timeToOptionalTime = data.FieldConverter{
+	OutputFieldType: data.FieldTypeNullableTime,
+	Converter: func(v interface{}) (interface{}, error) {
+		var ptr *time.Time
+		if v == nil {
+			return ptr, nil
+		}
+		val, ok := v.(time.Time)
+		if !ok {
+			return ptr, fmt.Errorf(`expected %s input but got type %T for value "%v"`, "time.Time", v, v)
+		}
+		ptr = &val
+		return ptr, nil
+	},
+}
+
 func getConverter(t string) (*data.FieldConverter, error) {
 	switch t {
 	case stringDatatype:
-		return &AnyToOptionalString, nil
+		return &converters.AnyToNullableString, nil
 	case timeDatatypeRFC:
-		return &TimeToOptionalTime, nil
+		return &timeToOptionalTime, nil
 	case timeDatatypeRFCNano:
-		return &TimeToOptionalTime, nil
+		return &timeToOptionalTime, nil
 	case durationDatatype:
-		return &Int64ToOptionalInt64, nil
+		return &converters.Int64ToNullableInt64, nil
 	case doubleDatatype:
-		return &Float64ToOptionalFloat64, nil
+		return &converters.Float64ToNullableFloat64, nil
 	case boolDatatype:
-		return &BoolToOptionalBool, nil
+		return &converters.BoolToNullableBool, nil
 	case longDatatype:
-		return &Int64ToOptionalInt64, nil
+		return &converters.Int64ToNullableInt64, nil
 	case uLongDatatype:
-		return &UInt64ToOptionalUInt64, nil
+		return &converters.Uint64ToNullableUInt64, nil
 	case base64BinaryDataType:
-		return &AnyToOptionalString, nil
+		return &converters.AnyToNullableString, nil
 	}
 
-	return nil, fmt.Errorf("No matching converter found for [%v]", t)
+	return nil, fmt.Errorf("no matching converter found for [%v]", t)
 }
 
 // Init initializes the frame to be returned
 // fields points at entries in the frame, and provides easier access
 // names indexes the columns encountered
-func (fb *FrameBuilder) Init(metadata *query.FluxTableMetadata) error {
+func (fb *frameBuilder) Init(metadata *query.FluxTableMetadata) error {
 	columns := metadata.Columns()
 	fb.frames = make([]*data.Frame, 0)
-	fb.tableID = -1
+	fb.currentGroupKey = nil
 	fb.value = nil
 	fb.columns = make([]columnInfo, 0)
 	fb.isTimeSeries = false
 	fb.timeColumn = ""
+	fb.groupKeyColumnNames = make([]string, 0)
+
+	for _, col := range columns {
+		if col.IsGroup() {
+			fb.groupKeyColumnNames = append(fb.groupKeyColumnNames, col.Name())
+		}
+	}
 
 	for _, col := range columns {
 		switch {
@@ -94,6 +119,7 @@ func (fb *FrameBuilder) Init(metadata *query.FluxTableMetadata) error {
 			if err != nil {
 				return err
 			}
+
 			fb.value = converter
 			fb.isTimeSeries = true
 		case isTag(col.Name()):
@@ -101,30 +127,42 @@ func (fb *FrameBuilder) Init(metadata *query.FluxTableMetadata) error {
 		}
 	}
 
+	// Timeseries has a "_value" and a time
 	if fb.isTimeSeries {
 		col := getTimeSeriesTimeColumn(columns)
-		if col == nil {
-			return fmt.Errorf("no time column in timeSeries")
-		}
-		fb.timeColumn = col.Name()
-		fb.timeDisplay = "Time"
-		if "_time" != fb.timeColumn {
-			fb.timeDisplay = col.Name()
-		}
-	} else {
-		fb.labels = make([]string, 0)
-		for _, col := range columns {
-			converter, err := getConverter(col.DataType())
-			if err != nil {
-				return err
+		if col != nil {
+			fb.timeColumn = col.Name()
+			fb.timeDisplay = "Time"
+			if fb.timeColumn != "_time" {
+				fb.timeDisplay = col.Name()
 			}
-			fb.columns = append(fb.columns, columnInfo{
-				name:      col.Name(),
-				converter: converter,
-			})
+			return nil
 		}
 	}
 
+	// reset any timeseries properties
+	fb.value = nil
+	fb.isTimeSeries = false
+	fb.labels = make([]string, 0)
+	for _, col := range columns {
+		// Skip the result column
+		if col.Index() == 0 && col.Name() == "result" && col.DataType() == stringDatatype {
+			continue
+		}
+		if col.Index() == 1 && col.Name() == "table" && col.DataType() == longDatatype {
+			continue
+		}
+
+		converter, err := getConverter(col.DataType())
+		if err != nil {
+			return err
+		}
+
+		fb.columns = append(fb.columns, columnInfo{
+			name:      col.Name(),
+			converter: converter,
+		})
+	}
 	return nil
 }
 
@@ -145,17 +183,63 @@ func getTimeSeriesTimeColumn(columns []*query.FluxColumn) *query.FluxColumn {
 	return nil
 }
 
+type maxPointsExceededError struct {
+	Count int
+}
+
+func (e maxPointsExceededError) Error() string {
+	return fmt.Sprintf("max data points limit exceeded (count is %d)", e.Count)
+}
+
+func getTableID(record *query.FluxRecord, groupColumns []string) []interface{} {
+	result := make([]interface{}, len(groupColumns))
+
+	// Flux does not allow duplicate column-names,
+	// so we can be sure there is no confusion in the record.
+	//
+	// ( it does allow for a column named "table" to exist,
+	// and shadow the table-id "table" column, but the potentially
+	// shadowed table-id column is not a part of the group-key,
+	// so we should be safe )
+
+	for i, colName := range groupColumns {
+		result[i] = record.ValueByKey(colName)
+	}
+
+	return result
+}
+
+func isTableIDEqual(id1 []interface{}, id2 []interface{}) bool {
+	if (id1 == nil) || (id2 == nil) {
+		return false
+	}
+
+	if len(id1) != len(id2) {
+		return false
+	}
+
+	for i, id1Val := range id1 {
+		id2Val := id2[i]
+
+		if id1Val != id2Val {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Append appends a single entry from an influxdb2 record to a data frame
 // Values are appended to _value
 // Tags are appended as labels
 // _measurement holds the dataframe name
 // _field holds the field name.
-func (fb *FrameBuilder) Append(record *query.FluxRecord) error {
-	table, ok := record.ValueByKey("table").(int64)
-	if ok && table != fb.tableID {
+func (fb *frameBuilder) Append(record *query.FluxRecord) error {
+	table := getTableID(record, fb.groupKeyColumnNames)
+	if (fb.currentGroupKey == nil) || !isTableIDEqual(table, fb.currentGroupKey) {
 		fb.totalSeries++
 		if fb.totalSeries > fb.maxSeries {
-			return fmt.Errorf("reached max series limit (%d)", fb.maxSeries)
+			return fmt.Errorf("results are truncated, max series reached (%d)", fb.maxSeries)
 		}
 
 		if fb.isTimeSeries {
@@ -179,9 +263,10 @@ func (fb *FrameBuilder) Append(record *query.FluxRecord) error {
 			// set the labels
 			labels := make(map[string]string)
 			for _, name := range fb.labels {
-				val, ok := record.ValueByKey(name).(string)
-				if ok {
-					labels[name] = val
+				val := record.ValueByKey(name)
+				str := fmt.Sprintf("%v", val)
+				if val != nil && str != "" {
+					labels[name] = str
 				}
 			}
 			fb.active.Fields[1].Labels = labels
@@ -195,19 +280,20 @@ func (fb *FrameBuilder) Append(record *query.FluxRecord) error {
 		}
 
 		fb.frames = append(fb.frames, fb.active)
-		fb.tableID = table
+		fb.currentGroupKey = table
 	}
 
 	if fb.isTimeSeries {
 		time, ok := record.ValueByKey(fb.timeColumn).(time.Time)
 		if !ok {
-			return fmt.Errorf("unable to get time colum: %s", fb.timeColumn)
+			return fmt.Errorf("unable to get time colum: %q", fb.timeColumn)
 		}
 
 		val, err := fb.value.Converter(record.Value())
 		if err != nil {
 			return err
 		}
+
 		fb.active.Fields[0].Append(time)
 		fb.active.Fields[1].Append(val)
 	} else {
@@ -217,12 +303,14 @@ func (fb *FrameBuilder) Append(record *query.FluxRecord) error {
 			if err != nil {
 				return err
 			}
+
 			fb.active.Fields[idx].Append(val)
 		}
 	}
 
-	if fb.active.Fields[0].Len() > fb.maxPoints {
-		return fmt.Errorf("returned too many points in a series: %d", fb.maxPoints)
+	pointsCount := fb.active.Fields[0].Len()
+	if pointsCount > fb.maxPoints {
+		return maxPointsExceededError{Count: pointsCount}
 	}
 
 	return nil

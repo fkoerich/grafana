@@ -1,5 +1,5 @@
 import React, { PureComponent, SyntheticEvent } from 'react';
-import { cx, css } from 'emotion';
+import { cx, css } from '@emotion/css';
 import { stylesFactory, withTheme } from '../../themes';
 import { GrafanaTheme } from '@grafana/data';
 import { Themeable } from '../../types';
@@ -30,16 +30,15 @@ const getStyles = stylesFactory((theme: GrafanaTheme) => {
       transition: opacity 0.1s ease;
       z-index: 0;
     `,
-    confirmButtonContainer: css`
+    confirmButton: css`
+      align-items: flex-start;
+      background: ${theme.colors.bg1};
+      display: flex;
       overflow: hidden;
       position: absolute;
-      z-index: 1;
-    `,
-    confirmButton: css`
-      display: flex;
-      align-items: flex-start;
     `,
     confirmButtonShow: css`
+      z-index: 1;
       opacity: 1;
       transition: opacity 0.08s ease-out, transform 0.1s ease-out;
       transform: translateX(0);
@@ -53,15 +52,24 @@ const getStyles = stylesFactory((theme: GrafanaTheme) => {
 });
 
 export interface Props extends Themeable {
+  /** Confirm action callback */
+  onConfirm(): void;
+  /** Custom button styles */
   className?: string;
+  /** Button size */
   size?: ComponentSize;
+  /** Text for the Confirm button */
   confirmText?: string;
+  /** Disable button click action */
   disabled?: boolean;
+  /** Variant of the Confirm button */
   confirmVariant?: ButtonVariant;
+  /** Hide confirm actions when after of them is clicked */
   closeOnConfirm?: boolean;
 
-  onConfirm(): void;
+  /** Optional on click handler for the original button */
   onClick?(): void;
+  /** Callback for the cancel action */
   onCancel?(): void;
 }
 
@@ -70,13 +78,6 @@ interface State {
 }
 
 class UnThemedConfirmButton extends PureComponent<Props, State> {
-  static defaultProps: Partial<Props> = {
-    size: 'md',
-    confirmText: 'Save',
-    disabled: false,
-    confirmVariant: 'primary',
-  };
-
   state: State = {
     showConfirm: false,
   };
@@ -106,7 +107,7 @@ class UnThemedConfirmButton extends PureComponent<Props, State> {
       this.props.onCancel();
     }
   };
-  onConfirm = (event: SyntheticEvent) => {
+  onConfirm = () => {
     this.props.onConfirm();
     if (this.props.closeOnConfirm) {
       this.setState({
@@ -135,6 +136,7 @@ class UnThemedConfirmButton extends PureComponent<Props, State> {
       styles.confirmButton,
       this.state.showConfirm ? styles.confirmButtonShow : styles.confirmButtonHide
     );
+
     const onClick = disabled ? () => {} : this.onClickButton;
 
     return (
@@ -150,15 +152,13 @@ class UnThemedConfirmButton extends PureComponent<Props, State> {
             {children}
           </span>
         )}
-        <span className={styles.confirmButtonContainer}>
-          <span className={confirmButtonClass}>
-            <Button size={size} variant="link" onClick={this.onClickCancel}>
-              Cancel
-            </Button>
-            <Button size={size} variant={confirmButtonVariant} onClick={this.onConfirm}>
-              {confirmText}
-            </Button>
-          </span>
+        <span className={confirmButtonClass}>
+          <Button size={size} variant="link" onClick={this.onClickCancel}>
+            Cancel
+          </Button>
+          <Button size={size} variant={confirmButtonVariant} onClick={this.onConfirm}>
+            {confirmText}
+          </Button>
         </span>
       </span>
     );
@@ -166,4 +166,13 @@ class UnThemedConfirmButton extends PureComponent<Props, State> {
 }
 
 export const ConfirmButton = withTheme(UnThemedConfirmButton);
+
+// Declare defaultProps directly on the themed component so they are displayed
+// in the props table
+ConfirmButton.defaultProps = {
+  size: 'md',
+  confirmText: 'Save',
+  disabled: false,
+  confirmVariant: 'primary',
+};
 ConfirmButton.displayName = 'ConfirmButton';

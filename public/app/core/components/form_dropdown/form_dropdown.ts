@@ -36,7 +36,7 @@ export class FormDropdownCtrl {
   lookupText: boolean;
   placeholder: any;
   startOpen: any;
-  debounce: number;
+  debounce: boolean;
 
   /** @ngInject */
   constructor(private $scope: any, $element: JQLite, private $sce: ISCEService, private templateSrv: any) {
@@ -44,10 +44,15 @@ export class FormDropdownCtrl {
     this.linkElement = $element.find('a').first();
     this.linkMode = true;
     this.cancelBlur = null;
+    this.labelMode = false;
+    this.lookupText = false;
+    this.debounce = false;
 
     // listen to model changes
     $scope.$watch('ctrl.model', this.modelChanged.bind(this));
+  }
 
+  $onInit() {
     if (this.labelMode) {
       this.cssClasses = 'gf-form-label ' + this.cssClass;
     } else {
@@ -70,7 +75,7 @@ export class FormDropdownCtrl {
     // modify typeahead lookup
     // this = typeahead
     const typeahead = this.inputElement.data('typeahead');
-    typeahead.lookup = function() {
+    typeahead.lookup = function () {
       this.query = this.$element.val() || '';
       this.source(this.query, this.process.bind(this));
     };
@@ -79,14 +84,14 @@ export class FormDropdownCtrl {
       typeahead.lookup = _.debounce(typeahead.lookup, 500, { leading: true });
     }
 
-    this.linkElement.keydown(evt => {
+    this.linkElement.keydown((evt) => {
       // trigger typeahead on down arrow or enter key
       if (evt.keyCode === 40 || evt.keyCode === 13) {
         this.linkElement.click();
       }
     });
 
-    this.inputElement.keydown(evt => {
+    this.inputElement.keydown((evt) => {
       if (evt.keyCode === 13) {
         setTimeout(() => {
           this.inputElement.blur();
@@ -167,7 +172,7 @@ export class FormDropdownCtrl {
     this.linkMode = true;
     this.inputElement.hide();
     this.linkElement.show();
-    this.updateValue(this.inputElement.val());
+    this.updateValue(this.inputElement.val() as string);
   }
 
   inputBlur() {

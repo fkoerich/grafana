@@ -5,14 +5,12 @@ import { Unsubscribable } from 'rxjs';
 import {
   CoreApp,
   DataQuery,
-  DataQueryError,
   DataQueryRequest,
   DataSourceApi,
   dateMath,
   DefaultTimeZone,
   HistoryItem,
   IntervalValues,
-  LogRowModel,
   LogsDedupStrategy,
   LogsSortOrder,
   RawTimeRange,
@@ -22,9 +20,12 @@ import {
   toUtc,
   urlUtil,
   ExploreUrlState,
+  rangeUtil,
+  DateTime,
+  isDateTime,
 } from '@grafana/data';
 import store from 'app/core/store';
-import kbn from 'app/core/utils/kbn';
+import { v4 as uuidv4 } from 'uuid';
 import { getNextRefIdChar } from './query';
 // Types
 import { RefreshPicker } from '@grafana/ui';
@@ -40,9 +41,6 @@ export const DEFAULT_RANGE = {
 };
 
 export const DEFAULT_UI_STATE = {
-  showingTable: true,
-  showingGraph: true,
-  showingLogs: true,
   dedupStrategy: LogsDedupStrategy.none,
 };
 
@@ -74,7 +72,7 @@ export async function getExploreUrl(args: GetExploreUrlArguments): Promise<strin
   /** In Explore, we don't have legend formatter and we don't want to keep
    * legend formatting as we can't change it
    */
-  let exploreTargets: DataQuery[] = panelTargets.map(t => _.omit(t, 'legendFormat'));
+  let exploreTargets: DataQuery[] = panelTargets.map((t) => _.omit(t, 'legendFormat'));
   let url: string | undefined;
 
   // Mixed datasources need to choose only one datasource
@@ -84,7 +82,7 @@ export async function getExploreUrl(args: GetExploreUrlArguments): Promise<strin
       const datasource = await datasourceSrv.get(t.datasource || undefined);
       if (datasource) {
         exploreDatasource = datasource;
-        exploreTargets = panelTargets.filter(t => t.datasource === datasource.name);
+        exploreTargets = panelTargets.filter((t) => t.datasource === datasource.name);
         break;
       }
     }
@@ -106,7 +104,7 @@ export async function getExploreUrl(args: GetExploreUrlArguments): Promise<strin
         ...state,
         datasource: exploreDatasource.name,
         context: 'explore',
-        queries: exploreTargets.map(t => ({ ...t, datasource: exploreDatasource.name })),
+        queries: exploreTargets.map((t) => ({ ...t, datasource: exploreDatasource.name })),
       };
     }
 
@@ -157,10 +155,7 @@ export function buildQueryTransaction(
       __interval_ms: { text: intervalMs, value: intervalMs },
     },
     maxDataPoints: queryOptions.maxDataPoints,
-    exploreMode: queryOptions.mode,
     liveStreaming: queryOptions.liveStreaming,
-    showingGraph: queryOptions.showingGraph,
-    showingTable: queryOptions.showingTable,
   };
 
   return {
@@ -176,7 +171,7 @@ export function buildQueryTransaction(
 export const clearQueryKeys: (query: DataQuery) => object = ({ key, refId, ...rest }) => rest;
 
 const isSegment = (segment: { [key: string]: string }, ...props: string[]) =>
-  props.some(prop => segment.hasOwnProperty(prop));
+  props.some((prop) => segment.hasOwnProperty(prop));
 
 enum ParseUrlStateIndex {
   RangeFrom = 0,
@@ -185,20 +180,13 @@ enum ParseUrlStateIndex {
   SegmentsStart = 3,
 }
 
-enum ParseUiStateIndex {
-  Graph = 0,
-  Logs = 1,
-  Table = 2,
-  Strategy = 3,
-}
-
 export const safeParseJson = (text?: string): any | undefined => {
   if (!text) {
     return;
   }
 
   try {
-    return JSON.parse(decodeURI(text));
+    return JSON.parse(text);
   } catch (error) {
     console.error(error);
   }
@@ -224,7 +212,6 @@ export function parseUrlState(initial: string | undefined): ExploreUrlState {
     datasource: null,
     queries: [],
     range: DEFAULT_RANGE,
-    ui: DEFAULT_UI_STATE,
     mode: null,
     originPanelId: null,
   };
@@ -248,24 +235,14 @@ export function parseUrlState(initial: string | undefined): ExploreUrlState {
   };
   const datasource = parsed[ParseUrlStateIndex.Datasource];
   const parsedSegments = parsed.slice(ParseUrlStateIndex.SegmentsStart);
-  const queries = parsedSegments.filter(segment => !isSegment(segment, 'ui', 'originPanelId'));
+  const queries = parsedSegments.filter((segment) => !isSegment(segment, 'ui', 'originPanelId', 'mode'));
 
-  const uiState = parsedSegments.filter(segment => isSegment(segment, 'ui'))[0];
-  const ui = uiState
-    ? {
-        showingGraph: uiState.ui[ParseUiStateIndex.Graph],
-        showingLogs: uiState.ui[ParseUiStateIndex.Logs],
-        showingTable: uiState.ui[ParseUiStateIndex.Table],
-        dedupStrategy: uiState.ui[ParseUiStateIndex.Strategy],
-      }
-    : DEFAULT_UI_STATE;
-
-  const originPanelId = parsedSegments.filter(segment => isSegment(segment, 'originPanelId'))[0];
-  return { datasource, queries, range, ui, originPanelId };
+  const originPanelId = parsedSegments.filter((segment) => isSegment(segment, 'originPanelId'))[0];
+  return { datasource, queries, range, originPanelId };
 }
 
 export function generateKey(index = 0): string {
-  return `Q-${Date.now()}-${Math.random()}-${index}`;
+  return `Q-${uuidv4()}-${index}`;
 }
 
 export function generateEmptyQuery(queries: DataQuery[], index = 0): DataQuery {
@@ -313,9 +290,9 @@ export function hasNonEmptyQuery<TQuery extends DataQuery = any>(queries: TQuery
     queries &&
     queries.some((query: any) => {
       const keys = Object.keys(query)
-        .filter(key => validKeys.indexOf(key) === -1)
-        .map(k => query[k])
-        .filter(v => v);
+        .filter((key) => validKeys.indexOf(key) === -1)
+        .map((k) => query[k])
+        .filter((v) => v);
       return keys.length > 0;
     })
   );
@@ -331,7 +308,7 @@ export function updateHistory<T extends DataQuery = any>(
 ): Array<HistoryItem<T>> {
   const ts = Date.now();
   let updatedHistory = history;
-  queries.forEach(query => {
+  queries.forEach((query) => {
     updatedHistory = [{ query, ts }, ...updatedHistory];
   });
 
@@ -372,9 +349,13 @@ export const getTimeRange = (timeZone: TimeZone, rawRange: RawTimeRange): TimeRa
   };
 };
 
-const parseRawTime = (value: any): TimeFragment | null => {
+const parseRawTime = (value: string | DateTime): TimeFragment | null => {
   if (value === null) {
     return null;
+  }
+
+  if (isDateTime(value)) {
+    return value;
   }
 
   if (value.indexOf('now') !== -1) {
@@ -391,9 +372,16 @@ const parseRawTime = (value: any): TimeFragment | null => {
     return toUtc(value, 'YYYY-MM-DD HH:mm:ss');
   }
 
-  if (!isNaN(value)) {
+  // This should handle cases where value is an epoch time as string
+  if (value.match(/^\d+$/)) {
     const epoch = parseInt(value, 10);
     return toUtc(epoch);
+  }
+
+  // This should handle ISO strings
+  const time = toUtc(value);
+  if (time.isValid()) {
+    return time;
   }
 
   return null;
@@ -431,14 +419,6 @@ export const getValueWithRefId = (value?: any): any => {
   }
 
   return undefined;
-};
-
-export const getFirstQueryErrorWithoutRefId = (errors?: DataQueryError[]): DataQueryError | undefined => {
-  if (!errors) {
-    return undefined;
-  }
-
-  return errors.filter(error => (error && error.refId ? false : true))[0];
 };
 
 export const getRefIds = (value: any): string[] => {
@@ -487,14 +467,14 @@ export function getIntervals(range: TimeRange, lowLimit?: string, resolution?: n
     return { interval: '1s', intervalMs: 1000 };
   }
 
-  return kbn.calculateInterval(range, resolution, lowLimit);
+  return rangeUtil.calculateInterval(range, resolution, lowLimit);
 }
 
-export function deduplicateLogRowsById(rows: LogRowModel[]) {
-  return _.uniqBy(rows, 'uid');
-}
-
-export const getFirstNonQueryRowSpecificError = (queryErrors?: DataQueryError[]): DataQueryError | undefined => {
-  const refId = getValueWithRefId(queryErrors);
-  return refId ? undefined : getFirstQueryErrorWithoutRefId(queryErrors);
+export const copyStringToClipboard = (string: string) => {
+  const el = document.createElement('textarea');
+  el.value = string;
+  document.body.appendChild(el);
+  el.select();
+  document.execCommand('copy');
+  document.body.removeChild(el);
 };

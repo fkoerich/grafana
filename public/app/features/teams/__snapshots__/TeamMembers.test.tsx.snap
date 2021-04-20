@@ -8,9 +8,7 @@ exports[`Render should render component 1`] = `
     <div
       className="gf-form gf-form--grow"
     >
-      <Component
-        inputClassName="gf-form-input"
-        labelClassName="gf-form--has-input-icon gf-form--grow"
+      <FilterInput
         onChange={[Function]}
         placeholder="Search members"
         value=""
@@ -27,7 +25,7 @@ exports[`Render should render component 1`] = `
       Add member
     </button>
   </div>
-  <Component
+  <SlideDown
     in={false}
   >
     <div
@@ -53,7 +51,7 @@ exports[`Render should render component 1`] = `
         />
       </div>
     </div>
-  </Component>
+  </SlideDown>
   <div
     className="admin-list-table"
   >
@@ -72,13 +70,13 @@ exports[`Render should render component 1`] = `
           <th>
             Name
           </th>
-          <Component
+          <WithFeatureToggle
             featureToggle={false}
           >
             <th>
               Permission
             </th>
-          </Component>
+          </WithFeatureToggle>
           <th
             style={
               Object {
@@ -102,9 +100,7 @@ exports[`Render should render team members 1`] = `
     <div
       className="gf-form gf-form--grow"
     >
-      <Component
-        inputClassName="gf-form-input"
-        labelClassName="gf-form--has-input-icon gf-form--grow"
+      <FilterInput
         onChange={[Function]}
         placeholder="Search members"
         value=""
@@ -121,7 +117,7 @@ exports[`Render should render team members 1`] = `
       Add member
     </button>
   </div>
-  <Component
+  <SlideDown
     in={false}
   >
     <div
@@ -147,7 +143,7 @@ exports[`Render should render team members 1`] = `
         />
       </div>
     </div>
-  </Component>
+  </SlideDown>
   <div
     className="admin-list-table"
   >
@@ -166,13 +162,13 @@ exports[`Render should render team members 1`] = `
           <th>
             Name
           </th>
-          <Component
+          <WithFeatureToggle
             featureToggle={false}
           >
             <th>
               Permission
             </th>
-          </Component>
+          </WithFeatureToggle>
           <th
             style={
               Object {

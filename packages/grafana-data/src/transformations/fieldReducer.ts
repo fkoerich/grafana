@@ -1,7 +1,7 @@
 // Libraries
 import isNumber from 'lodash/isNumber';
 
-import { NullValueMode, Field, FieldState, FieldCalcs } from '../types/index';
+import { NullValueMode, Field, FieldState, FieldCalcs, FieldType } from '../types/index';
 import { Registry, RegistryItem } from '../utils/Registry';
 
 export enum ReducerID {
@@ -15,6 +15,7 @@ export enum ReducerID {
   count = 'count',
   range = 'range',
   diff = 'diff',
+  diffperc = 'diffperc',
   delta = 'delta',
   step = 'step',
 
@@ -223,6 +224,12 @@ export const fieldReducers = new Registry<FieldReducerInfo>(() => [
     standard: false,
     reduce: calculateDistinctCount,
   },
+  {
+    id: ReducerID.diffperc,
+    name: 'Difference percent',
+    description: 'Percentage difference between first and last values',
+    standard: true,
+  },
 ]);
 
 export function doStandardCalcs(field: Field, ignoreNulls: boolean, nullAsZero: boolean): FieldCalcs {
@@ -244,6 +251,7 @@ export function doStandardCalcs(field: Field, ignoreNulls: boolean, nullAsZero: 
     diff: null,
     delta: 0,
     step: Number.MAX_VALUE,
+    diffperc: 0,
 
     // Just used for calculations -- not exposed as a stat
     previousDeltaUp: true,
@@ -251,6 +259,8 @@ export function doStandardCalcs(field: Field, ignoreNulls: boolean, nullAsZero: 
 
   const data = field.values;
   calcs.count = data.length;
+
+  const isNumberField = field.type === FieldType.number || FieldType.time;
 
   for (let i = 0; i < data.length; i++) {
     let currentValue = data.get(i);
@@ -270,13 +280,14 @@ export function doStandardCalcs(field: Field, ignoreNulls: boolean, nullAsZero: 
       }
     }
 
-    if (currentValue !== null && currentValue !== undefined) {
+    if (currentValue != null) {
+      // null || undefined
       const isFirst = calcs.firstNotNull === null;
       if (isFirst) {
         calcs.firstNotNull = currentValue;
       }
 
-      if (isNumber(currentValue)) {
+      if (isNumberField) {
         calcs.sum += currentValue;
         calcs.allIsNull = false;
         calcs.nonNullCount++;
@@ -353,6 +364,9 @@ export function doStandardCalcs(field: Field, ignoreNulls: boolean, nullAsZero: 
     calcs.diff = calcs.lastNotNull - calcs.firstNotNull;
   }
 
+  if (isNumber(calcs.firstNotNull) && isNumber(calcs.diff)) {
+    calcs.diffperc = calcs.diff / calcs.firstNotNull;
+  }
   return calcs;
 }
 

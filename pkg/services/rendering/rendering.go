@@ -2,6 +2,7 @@ package rendering
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net/url"
@@ -24,12 +25,13 @@ import (
 func init() {
 	remotecache.Register(&RenderUser{})
 	registry.Register(&registry.Descriptor{
-		Name:         "RenderingService",
+		Name:         ServiceName,
 		Instance:     &RenderingService{},
 		InitPriority: registry.High,
 	})
 }
 
+const ServiceName = "RenderingService"
 const renderKeyPrefix = "render-%s"
 
 type RenderUser struct {
@@ -47,6 +49,7 @@ type RenderingService struct {
 
 	Cfg                *setting.Cfg             `inject:""`
 	RemoteCacheService *remotecache.RemoteCache `inject:""`
+	PluginManager      plugins.Manager          `inject:""`
 }
 
 func (rs *RenderingService) Init() error {
@@ -55,7 +58,7 @@ func (rs *RenderingService) Init() error {
 	// ensure ImagesDir exists
 	err := os.MkdirAll(rs.Cfg.ImagesDir, 0700)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create images directory %q: %w", rs.Cfg.ImagesDir, err)
 	}
 
 	// set value used for domain attribute of renderKey cookie
@@ -64,8 +67,8 @@ func (rs *RenderingService) Init() error {
 		// RendererCallbackUrl has already been passed, it won't generate an error.
 		u, _ := url.Parse(rs.Cfg.RendererCallbackUrl)
 		rs.domain = u.Hostname()
-	case setting.HttpAddr != setting.DEFAULT_HTTP_ADDR:
-		rs.domain = setting.HttpAddr
+	case rs.Cfg.HTTPAddr != setting.DefaultHTTPAddr:
+		rs.domain = rs.Cfg.HTTPAddr
 	default:
 		rs.domain = "localhost"
 	}
@@ -84,7 +87,7 @@ func (rs *RenderingService) Run(ctx context.Context) error {
 
 	if rs.pluginAvailable() {
 		rs.log = rs.log.New("renderer", "plugin")
-		rs.pluginInfo = plugins.Renderer
+		rs.pluginInfo = rs.PluginManager.Renderer()
 
 		if err := rs.startPlugin(ctx); err != nil {
 			return err
@@ -104,7 +107,7 @@ func (rs *RenderingService) Run(ctx context.Context) error {
 }
 
 func (rs *RenderingService) pluginAvailable() bool {
-	return plugins.Renderer != nil
+	return rs.PluginManager.Renderer() != nil
 }
 
 func (rs *RenderingService) remoteAvailable() bool {
@@ -136,7 +139,7 @@ func (rs *RenderingService) Render(ctx context.Context, opts Opts) (*RenderResul
 	elapsedTime := time.Since(startTime).Milliseconds()
 	result, err := rs.render(ctx, opts)
 	if err != nil {
-		if err == ErrTimeout {
+		if errors.Is(err, ErrTimeout) {
 			metrics.MRenderingRequestTotal.WithLabelValues("timeout").Inc()
 			metrics.MRenderingSummary.WithLabelValues("timeout").Observe(float64(elapsedTime))
 		} else {
@@ -225,21 +228,23 @@ func (rs *RenderingService) getURL(path string) string {
 		return fmt.Sprintf("%s%s&render=1", rs.Cfg.RendererCallbackUrl, path)
 	}
 
-	protocol := setting.Protocol
-	switch setting.Protocol {
-	case setting.HTTP:
+	protocol := rs.Cfg.Protocol
+	switch protocol {
+	case setting.HTTPScheme:
 		protocol = "http"
-	case setting.HTTP2, setting.HTTPS:
+	case setting.HTTP2Scheme, setting.HTTPSScheme:
 		protocol = "https"
+	default:
+		// TODO: Handle other schemes?
 	}
 
 	subPath := ""
 	if rs.Cfg.ServeFromSubPath {
-		subPath = rs.Cfg.AppSubUrl
+		subPath = rs.Cfg.AppSubURL
 	}
 
 	// &render=1 signals to the legacy redirect layer to
-	return fmt.Sprintf("%s://%s:%s%s/%s&render=1", protocol, rs.domain, setting.HttpPort, subPath, path)
+	return fmt.Sprintf("%s://%s:%s%s/%s&render=1", protocol, rs.domain, rs.Cfg.HTTPPort, subPath, path)
 }
 
 func (rs *RenderingService) generateAndStoreRenderKey(orgId, userId int64, orgRole models.RoleType) (string, error) {

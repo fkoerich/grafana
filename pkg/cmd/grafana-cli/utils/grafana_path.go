@@ -2,7 +2,6 @@ package utils
 
 import (
 	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/grafana/grafana/pkg/cmd/grafana-cli/logger"
@@ -17,8 +16,8 @@ func GetGrafanaPluginDir(currentOS string) string {
 	return returnOsDefault(currentOS)
 }
 
-// getGrafanaRoot tries to get root of directory when developing grafana ie repo root. It is not perfect it just
-// checks what is the binary path and tries to guess based on that but if it is not running in dev env you get a bogus
+// getGrafanaRoot tries to get root of directory when developing grafana, ie. repo root. It is not perfect, it just
+// checks what is the binary path and tries to guess based on that, but if it is not running in dev env you get a bogus
 // path back.
 func getGrafanaRoot() (string, error) {
 	ex, err := os.Executable()
@@ -26,7 +25,7 @@ func getGrafanaRoot() (string, error) {
 		return "", errutil.Wrap("failed to get executable path", err)
 	}
 	exPath := filepath.Dir(ex)
-	_, last := path.Split(exPath)
+	_, last := filepath.Split(exPath)
 	if last == "bin" {
 		// In dev env the executable for current platform is created in 'bin/' dir
 		return filepath.Join(exPath, ".."), nil
@@ -65,7 +64,7 @@ func returnOsDefault(currentOs string) string {
 		return "/var/db/grafana/plugins"
 	case "openbsd":
 		return "/var/grafana/plugins"
-	default: //"linux"
+	default: // "linux"
 		return "/var/lib/grafana/plugins"
 	}
 }

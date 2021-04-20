@@ -1,5 +1,5 @@
 import { LokiDatasource, LOKI_ENDPOINT } from './datasource';
-import { DataSourceSettings } from '@grafana/data';
+import { AbsoluteTimeRange, DataSourceSettings } from '@grafana/data';
 import { LokiOptions } from './types';
 import { createDatasourceSettings } from '../../../features/datasources/mocks';
 
@@ -20,9 +20,14 @@ export function makeMockLokiDatasource(labelsAndValues: Labels, series?: SeriesF
   const lokiSeriesEndpointRegex = /^\/loki\/api\/v1\/series/;
 
   const lokiLabelsEndpoint = `${LOKI_ENDPOINT}/label`;
+  const rangeMock: AbsoluteTimeRange = {
+    from: 1560153109000,
+    to: 1560163909000,
+  };
 
   const labels = Object.keys(labelsAndValues);
   return {
+    getTimeRangeParams: () => rangeMock,
     metadataRequest: (url: string, params?: { [key: string]: string }) => {
       if (url === lokiLabelsEndpoint) {
         return labels;

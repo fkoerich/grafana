@@ -13,8 +13,9 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-//ApplyRoute should use the plugin route data to set auth headers and custom headers
-func ApplyRoute(ctx context.Context, req *http.Request, proxyPath string, route *plugins.AppPluginRoute, ds *models.DataSource) {
+// ApplyRoute should use the plugin route data to set auth headers and custom headers.
+func ApplyRoute(ctx context.Context, req *http.Request, proxyPath string, route *plugins.AppPluginRoute,
+	ds *models.DataSource) {
 	proxyPath = strings.TrimPrefix(proxyPath, route.Path)
 
 	data := templateData{
@@ -22,22 +23,24 @@ func ApplyRoute(ctx context.Context, req *http.Request, proxyPath string, route 
 		SecureJsonData: ds.SecureJsonData.Decrypt(),
 	}
 
-	interpolatedURL, err := InterpolateString(route.URL, data)
-	if err != nil {
-		logger.Error("Error interpolating proxy url", "error", err)
-		return
-	}
+	if len(route.URL) > 0 {
+		interpolatedURL, err := interpolateString(route.URL, data)
+		if err != nil {
+			logger.Error("Error interpolating proxy url", "error", err)
+			return
+		}
 
-	routeURL, err := url.Parse(interpolatedURL)
-	if err != nil {
-		logger.Error("Error parsing plugin route url", "error", err)
-		return
-	}
+		routeURL, err := url.Parse(interpolatedURL)
+		if err != nil {
+			logger.Error("Error parsing plugin route url", "error", err)
+			return
+		}
 
-	req.URL.Scheme = routeURL.Scheme
-	req.URL.Host = routeURL.Host
-	req.Host = routeURL.Host
-	req.URL.Path = util.JoinURLFragments(routeURL.Path, proxyPath)
+		req.URL.Scheme = routeURL.Scheme
+		req.URL.Host = routeURL.Host
+		req.Host = routeURL.Host
+		req.URL.Path = util.JoinURLFragments(routeURL.Path, proxyPath)
+	}
 
 	if err := addQueryString(req, route, data); err != nil {
 		logger.Error("Failed to render plugin URL query string", "error", err)
@@ -45,6 +48,10 @@ func ApplyRoute(ctx context.Context, req *http.Request, proxyPath string, route 
 
 	if err := addHeaders(&req.Header, route, data); err != nil {
 		logger.Error("Failed to render plugin headers", "error", err)
+	}
+
+	if err := setBodyContent(req, route, data); err != nil {
+		logger.Error("Failed to set plugin route body content", "error", err)
 	}
 
 	tokenProvider := newAccessTokenProvider(ds, route)
@@ -81,36 +88,4 @@ func ApplyRoute(ctx context.Context, req *http.Request, proxyPath string, route 
 	}
 
 	logger.Info("Requesting", "url", req.URL.String())
-}
-
-func addQueryString(req *http.Request, route *plugins.AppPluginRoute, data templateData) error {
-	q := req.URL.Query()
-	for _, param := range route.URLParams {
-		interpolatedName, err := InterpolateString(param.Name, data)
-		if err != nil {
-			return err
-		}
-
-		interpolatedContent, err := InterpolateString(param.Content, data)
-		if err != nil {
-			return err
-		}
-
-		q.Add(interpolatedName, interpolatedContent)
-	}
-	req.URL.RawQuery = q.Encode()
-
-	return nil
-}
-
-func addHeaders(reqHeaders *http.Header, route *plugins.AppPluginRoute, data templateData) error {
-	for _, header := range route.Headers {
-		interpolated, err := InterpolateString(header.Content, data)
-		if err != nil {
-			return err
-		}
-		reqHeaders.Add(header.Name, interpolated)
-	}
-
-	return nil
 }

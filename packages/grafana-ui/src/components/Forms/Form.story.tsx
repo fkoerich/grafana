@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 import { withCenteredStory } from '../../utils/storybook/withCenteredStory';
 import { withStoryContainer } from '../../utils/storybook/withStoryContainer';
 import mdx from './Form.mdx';
 import { ValidateResult } from 'react-hook-form';
-import { boolean } from '@storybook/addon-knobs';
+import { Story } from '@storybook/react';
 import {
   Field,
   Legend,
@@ -25,6 +25,9 @@ export default {
   parameters: {
     docs: {
       page: mdx,
+    },
+    knobs: {
+      disable: true,
     },
   },
 };
@@ -120,11 +123,11 @@ const renderForm = (defaultValues?: Partial<FormDTO>) => (
   </Form>
 );
 
-export const basic = () => {
+export const Basic = () => {
   return <>{renderForm()}</>;
 };
 
-export const defaultValues = () => {
+export const DefaultValues = () => {
   const defaultValues = [
     {
       name: 'Roger Waters',
@@ -135,35 +138,12 @@ export const defaultValues = () => {
       select: 'option1',
       switch: true,
     },
-    {
-      name: 'John Waters',
-      nested: {
-        path: 'Nested path default value updated',
-      },
-      radio: 'option1',
-      select: 'option2',
-      switch: false,
-    },
   ];
-  const [defaultsIdx, setDefaultsIdx] = useState(0);
 
-  return (
-    <>
-      {renderForm(defaultValues[defaultsIdx])}
-      <Button
-        onClick={() => {
-          setDefaultsIdx(s => (s + 1) % 2);
-        }}
-        variant="secondary"
-      >
-        Change default values
-      </Button>
-    </>
-  );
+  return <>{renderForm(defaultValues[0])}</>;
 };
 
-export const asyncValidation = () => {
-  const passAsyncValidation = boolean('Pass username validation', true);
+export const AsyncValidation: Story = ({ passAsyncValidation }) => {
   return (
     <>
       <Form
@@ -194,10 +174,13 @@ export const asyncValidation = () => {
     </>
   );
 };
+AsyncValidation.args = {
+  passAsyncValidation: true,
+};
 
 const validateAsync = (shouldPass: boolean) => async () => {
   try {
-    await new Promise<ValidateResult>((resolve, reject) => {
+    await new Promise<ValidateResult | void>((resolve, reject) => {
       setTimeout(() => {
         if (shouldPass) {
           resolve();

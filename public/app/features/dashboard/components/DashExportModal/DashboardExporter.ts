@@ -75,7 +75,7 @@ export class DashboardExporter {
       promises.push(
         getDataSourceSrv()
           .get(datasource)
-          .then(ds => {
+          .then((ds) => {
             if (ds.meta?.builtIn) {
               return;
             }
@@ -109,7 +109,7 @@ export class DashboardExporter {
     };
 
     const processPanel = (panel: PanelModel) => {
-      if (panel.datasource !== undefined) {
+      if (panel.datasource !== undefined && panel.datasource !== null) {
         templateizeDatasourceUsage(panel);
       }
 
@@ -182,16 +182,17 @@ export class DashboardExporter {
               name: refName,
               type: 'constant',
               label: variable.label || variable.name,
-              value: variable.current.value,
+              value: variable.query,
               description: '',
             });
             // update current and option
             variable.query = '${' + refName + '}';
-            variable.options[0] = variable.current = {
+            variable.current = {
               value: variable.query,
               text: variable.query,
               selected: false,
             };
+            variable.options = [variable.current];
           }
         }
 
@@ -203,7 +204,7 @@ export class DashboardExporter {
         _.defaults(newObj, saveModel);
         return newObj;
       })
-      .catch(err => {
+      .catch((err) => {
         console.error('Export failed:', err);
         return {
           error: err,

@@ -2,6 +2,7 @@ package notifiers
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"os"
@@ -23,24 +24,6 @@ func init() {
 		Description: "Sends notifications to Discord",
 		Factory:     newDiscordNotifier,
 		Heading:     "Discord settings",
-		OptionsTemplate: `
-      <h3 class="page-heading">Discord settings</h3>
-      <div class="gf-form max-width-30">
-        <span class="gf-form-label width-10">Message Content</span>
-        <input type="text"
-          class="gf-form-input max-width-30"
-          ng-model="ctrl.model.settings.content"
-          data-placement="right">
-        </input>
-        <info-popover mode="right-absolute">
-          Mention a group using @ or a user using <@ID> when notifying in a channel
-        </info-popover>
-      </div>
-      <div class="gf-form  max-width-30">
-        <span class="gf-form-label width-10">Webhook URL</span>
-        <input type="text" required class="gf-form-input max-width-30" ng-model="ctrl.model.settings.url" placeholder="Discord webhook URL"></input>
-      </div>
-    `,
 		Options: []alerting.NotifierOption{
 			{
 				Label:        "Message Content",
@@ -106,7 +89,9 @@ func (dn *DiscordNotifier) Notify(evalContext *alerting.EvalContext) error {
 
 	for _, evt := range evalContext.EvalMatches {
 		fields = append(fields, map[string]interface{}{
-			"name":   evt.Metric,
+			// Discord uniquely does not send the alert if the metric field is empty,
+			// which it can be in some cases
+			"name":   notEmpty(evt.Metric),
 			"value":  evt.Value.FullString(),
 			"inline": true,
 		})
@@ -121,7 +106,7 @@ func (dn *DiscordNotifier) Notify(evalContext *alerting.EvalContext) error {
 
 	embed := simplejson.New()
 	embed.Set("title", evalContext.GetNotificationTitle())
-	//Discord takes integer for color
+	// Discord takes integer for color
 	embed.Set("color", color)
 	embed.Set("url", ruleURL)
 	embed.Set("description", evalContext.Rule.Message)
@@ -176,6 +161,9 @@ func (dn *DiscordNotifier) Notify(evalContext *alerting.EvalContext) error {
 }
 
 func (dn *DiscordNotifier) embedImage(cmd *models.SendWebhookSync, imagePath string, existingJSONBody []byte) error {
+	// nolint:gosec
+	// We can ignore the gosec G304 warning on this one because `imagePath` comes
+	// from the alert `evalContext` that generates the images.
 	f, err := os.Open(imagePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -186,12 +174,20 @@ func (dn *DiscordNotifier) embedImage(cmd *models.SendWebhookSync, imagePath str
 			return err
 		}
 	}
-
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			dn.log.Warn("Failed to close file", "path", imagePath, "err", err)
+		}
+	}()
 
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
-
+	defer func() {
+		if err := w.Close(); err != nil {
+			// Should be OK since we already close it on non-error path
+			dn.log.Warn("Failed to close multipart writer", "err", err)
+		}
+	}()
 	fw, err := w.CreateFormField("payload_json")
 	if err != nil {
 		return err
@@ -210,10 +206,20 @@ func (dn *DiscordNotifier) embedImage(cmd *models.SendWebhookSync, imagePath str
 		return err
 	}
 
-	w.Close()
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("failed to close multipart writer: %w", err)
+	}
 
 	cmd.Body = b.String()
 	cmd.ContentType = w.FormDataContentType()
 
 	return nil
+}
+
+func notEmpty(metric string) string {
+	if metric == "" {
+		return "<NO_METRIC_NAME>"
+	}
+
+	return metric
 }

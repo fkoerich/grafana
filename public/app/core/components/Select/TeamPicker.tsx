@@ -1,9 +1,7 @@
 import React, { Component } from 'react';
-import _ from 'lodash';
-import { LegacyForms } from '@grafana/ui';
-import { debounce } from 'lodash';
+import _, { debounce } from 'lodash';
+import { AsyncSelect } from '@grafana/ui';
 import { getBackendSrv } from '@grafana/runtime';
-const { AsyncSelect } = LegacyForms;
 
 export interface Team {
   id: number;
@@ -64,7 +62,7 @@ export class TeamPicker extends Component<Props, State> {
     const { onSelected, className } = this.props;
     const { isLoading } = this.state;
     return (
-      <div className="user-picker">
+      <div className="user-picker" data-testid="teamPicker">
         <AsyncSelect
           isLoading={isLoading}
           defaultOptions={true}
@@ -72,7 +70,7 @@ export class TeamPicker extends Component<Props, State> {
           onChange={onSelected}
           className={className}
           placeholder="Select a team"
-          noOptionsMessage={() => 'No teams found'}
+          noOptionsMessage="No teams found"
         />
       </div>
     );

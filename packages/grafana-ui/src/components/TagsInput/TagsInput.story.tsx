@@ -1,27 +1,33 @@
-import React from 'react';
-import { action } from '@storybook/addon-actions';
+import React, { useState } from 'react';
 import { withCenteredStory } from '../../utils/storybook/withCenteredStory';
-import { UseState } from '../../utils/storybook/UseState';
 import { TagsInput } from '@grafana/ui';
-
-const mockTags = ['Some', 'Tags', 'With', 'This', 'New', 'Component'];
+import mdx from './TagsInput.mdx';
+import { StoryExample } from '../../utils/storybook/StoryExample';
+import { VerticalGroup } from '../Layout/Layout';
 
 export default {
   title: 'Forms/TagsInput',
   component: TagsInput,
   decorators: [withCenteredStory],
+  parameters: {
+    docs: {
+      page: mdx,
+    },
+  },
 };
 
-export const basic = () => {
-  return <TagsInput tags={[]} onChange={tags => action('tags updated')(tags)} />;
+export const Basic = () => {
+  const [tags, setTags] = useState<string[]>([]);
+  return <TagsInput tags={tags} onChange={setTags} />;
 };
 
-export const withMockTags = () => {
+export const WithManyTags = () => {
+  const [tags, setTags] = useState<string[]>(['dashboard', 'prod', 'server', 'frontend', 'game', 'kubernetes']);
   return (
-    <UseState initialState={mockTags}>
-      {tags => {
-        return <TagsInput tags={tags} onChange={tags => action('tags updated')(tags)} />;
-      }}
-    </UseState>
+    <VerticalGroup>
+      <StoryExample name="With many tags">
+        <TagsInput tags={tags} onChange={setTags} />
+      </StoryExample>
+    </VerticalGroup>
   );
 };

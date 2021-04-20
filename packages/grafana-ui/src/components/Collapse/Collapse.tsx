@@ -1,5 +1,5 @@
 import React, { FunctionComponent, useContext, useState } from 'react';
-import { css, cx } from 'emotion';
+import { css, cx } from '@emotion/css';
 
 import { GrafanaTheme } from '@grafana/data';
 import { ThemeContext } from '../../themes/ThemeContext';
@@ -14,6 +14,15 @@ const getStyles = stylesFactory((theme: GrafanaTheme) => ({
   collapseBody: css`
     label: collapse__body;
     padding: ${theme.panelPadding}px;
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  `,
+  bodyContentWrapper: css`
+    label: bodyContentWrapper;
+    flex: 1;
+    overflow: hidden;
   `,
   loader: css`
     label: collapse__loader;
@@ -82,12 +91,19 @@ const getStyles = stylesFactory((theme: GrafanaTheme) => ({
   `,
 }));
 
-interface Props {
+export interface Props {
+  /** Expand or collapse te content */
   isOpen?: boolean;
-  label: string;
+  /** Element or text for the Collapse header */
+  label: React.ReactNode;
+  /** Indicates loading state of the content */
   loading?: boolean;
+  /** Toggle collapsed header icon */
   collapsible?: boolean;
+  /** Callback for the toggle functionality */
   onToggle?: (isOpen: boolean) => void;
+  /** Additional class name for the root element */
+  className?: string;
 }
 
 export const ControlledCollapse: FunctionComponent<Props> = ({ isOpen, onToggle, ...otherProps }) => {
@@ -106,7 +122,15 @@ export const ControlledCollapse: FunctionComponent<Props> = ({ isOpen, onToggle,
   );
 };
 
-export const Collapse: FunctionComponent<Props> = ({ isOpen, label, loading, collapsible, onToggle, children }) => {
+export const Collapse: FunctionComponent<Props> = ({
+  isOpen,
+  label,
+  loading,
+  collapsible,
+  onToggle,
+  className,
+  children,
+}) => {
   const theme = useContext(ThemeContext);
   const style = getStyles(theme);
   const onClickToggle = () => {
@@ -115,7 +139,7 @@ export const Collapse: FunctionComponent<Props> = ({ isOpen, label, loading, col
     }
   };
 
-  const panelClass = cx([style.collapse, 'panel-container']);
+  const panelClass = cx([style.collapse, 'panel-container', className]);
   const loaderClass = loading ? cx([style.loader, style.loaderActive]) : cx([style.loader]);
   const headerClass = collapsible ? cx([style.header]) : cx([style.headerCollapsed]);
   const headerButtonsClass = collapsible ? cx([style.headerButtons]) : cx([style.headerButtonsCollapsed]);
@@ -131,7 +155,7 @@ export const Collapse: FunctionComponent<Props> = ({ isOpen, label, loading, col
       {isOpen && (
         <div className={cx([style.collapseBody])}>
           <div className={loaderClass} />
-          {children}
+          <div className={style.bodyContentWrapper}>{children}</div>
         </div>
       )}
     </div>

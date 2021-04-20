@@ -54,15 +54,21 @@ export function buildNavModel(dataSource: DataSourceSettings, plugin: GenericDat
       url: `datasources/edit/${dataSource.id}/permissions`,
     });
 
-    if (config.featureToggles.datasourceInsights) {
-      navModel.children!.push({
-        active: false,
-        icon: 'info-circle',
-        id: `datasource-insights-${dataSource.id}`,
-        text: 'Insights',
-        url: `datasources/edit/${dataSource.id}/insights`,
-      });
-    }
+    navModel.children!.push({
+      active: false,
+      icon: 'info-circle',
+      id: `datasource-insights-${dataSource.id}`,
+      text: 'Insights',
+      url: `datasources/edit/${dataSource.id}/insights`,
+    });
+
+    navModel.children!.push({
+      active: false,
+      icon: 'database',
+      id: `datasource-cache-${dataSource.id}`,
+      text: 'Cache',
+      url: `datasources/edit/${dataSource.id}/cache`,
+    });
   }
 
   return navModel;
@@ -85,6 +91,7 @@ export function getDataSourceLoadingNav(pageName: string): NavModel {
       password: '',
       readOnly: false,
       type: 'Loading',
+      typeName: 'Loading',
       typeLogoUrl: 'public/img/icn-datasource.svg',
       url: '',
       user: '',
@@ -136,7 +143,7 @@ export function getDataSourceLoadingNav(pageName: string): NavModel {
 
 function hasDashboards(includes: PluginInclude[]): boolean {
   return (
-    includes.find(include => {
+    includes.find((include) => {
       return include.type === 'dashboard';
     }) !== undefined
   );

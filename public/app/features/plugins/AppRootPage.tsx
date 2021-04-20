@@ -1,10 +1,7 @@
 // Libraries
 import React, { Component } from 'react';
-import { hot } from 'react-hot-loader';
-import { connect } from 'react-redux';
-// Types
-import { StoreState } from 'app/types';
-import { AppEvents, AppPlugin, AppPluginMeta, NavModel, PluginType, UrlQueryMap } from '@grafana/data';
+import { AppEvents, AppPlugin, AppPluginMeta, NavModel, PluginType } from '@grafana/data';
+import { createHtmlPortalNode, InPortal, OutPortal, HtmlPortalNode } from 'react-reverse-portal';
 
 import Page from 'app/core/components/Page/Page';
 import { getPluginSettings } from './PluginSettingsCache';
@@ -12,16 +9,17 @@ import { importAppPlugin } from './plugin_loader';
 import { getNotFoundNav, getWarningNav, getExceptionNav } from 'app/core/nav_model_srv';
 import { appEvents } from 'app/core/core';
 import PageLoader from 'app/core/components/PageLoader/PageLoader';
+import { GrafanaRouteComponentProps } from 'app/core/navigation/types';
 
-interface Props {
-  pluginId: string; // From the angular router
-  query: UrlQueryMap;
-  path: string;
-  slug?: string;
+interface RouteParams {
+  pluginId: string;
 }
+
+interface Props extends GrafanaRouteComponentProps<RouteParams> {}
 
 interface State {
   loading: boolean;
+  portalNode: HtmlPortalNode;
   plugin?: AppPlugin | null;
   nav?: NavModel;
 }
@@ -44,14 +42,18 @@ class AppRootPage extends Component<Props, State> {
     super(props);
     this.state = {
       loading: true,
+      portalNode: createHtmlPortalNode(),
     };
   }
 
-  async componentDidMount() {
-    const { pluginId } = this.props;
+  shouldComponentUpdate(nextProps: Props) {
+    return nextProps.location.pathname.startsWith('/a/');
+  }
 
+  async componentDidMount() {
+    const { params } = this.props.match;
     try {
-      const app = await getPluginSettings(pluginId).then(info => {
+      const app = await getPluginSettings(params.pluginId).then((info) => {
         const error = getAppPluginPageError(info);
         if (error) {
           appEvents.emit(AppEvents.alertError, [error]);
@@ -75,39 +77,41 @@ class AppRootPage extends Component<Props, State> {
   };
 
   render() {
-    const { path, query } = this.props;
-    const { loading, plugin, nav } = this.state;
+    const { location, queryParams } = this.props;
+    const { loading, plugin, nav, portalNode } = this.state;
 
     if (plugin && !plugin.root) {
       // TODO? redirect to plugin page?
       return <div>No Root App</div>;
     }
 
-    // When no naviagion is set, give full control to the app plugin
-    if (!nav) {
-      if (plugin && plugin.root) {
-        return <plugin.root meta={plugin.meta} query={query} path={path} onNavChanged={this.onNavChanged} />;
-      }
-      return <PageLoader />;
-    }
-
     return (
-      <Page navModel={nav}>
-        <Page.Contents isLoading={loading}>
+      <>
+        <InPortal node={portalNode}>
           {plugin && plugin.root && (
-            <plugin.root meta={plugin.meta} query={query} path={path} onNavChanged={this.onNavChanged} />
+            <plugin.root
+              meta={plugin.meta}
+              query={queryParams}
+              path={location.pathname}
+              onNavChanged={this.onNavChanged}
+            />
           )}
-        </Page.Contents>
-      </Page>
+        </InPortal>
+        {nav ? (
+          <Page navModel={nav}>
+            <Page.Contents isLoading={loading}>
+              <OutPortal node={portalNode} />
+            </Page.Contents>
+          </Page>
+        ) : (
+          <>
+            <OutPortal node={portalNode} />
+            {loading && <PageLoader />}
+          </>
+        )}
+      </>
     );
   }
 }
 
-const mapStateToProps = (state: StoreState) => ({
-  pluginId: state.location.routeParams.pluginId,
-  slug: state.location.routeParams.slug,
-  query: state.location.query,
-  path: state.location.path,
-});
-
-export default hot(module)(connect(mapStateToProps)(AppRootPage));
+export default AppRootPage;

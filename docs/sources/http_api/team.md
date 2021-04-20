@@ -3,10 +3,6 @@ title = "Team HTTP API "
 description = "Grafana Team HTTP API"
 keywords = ["grafana", "http", "documentation", "api", "team", "teams", "group"]
 aliases = ["/docs/grafana/latest/http_api/team/"]
-type = "docs"
-[menu.docs]
-name = "Teams"
-parent = "http_api"
 +++
 
 # Team API
@@ -46,6 +42,7 @@ The `name` parameter returns a single team if the parameter matches the `name` f
 HTTP/1.1 200
 Content-Type: application/json
 
+{
   "totalCount": 1,
   "teams": [
     {

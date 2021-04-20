@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { css } from 'emotion';
+import { css } from '@emotion/css';
 import { ThemeContext, LinkButton, CallToActionCard, Icon } from '@grafana/ui';
 
 export const NoDataSourceCallToAction = () => {
@@ -14,7 +14,7 @@ export const NoDataSourceCallToAction = () => {
       <a
         href="http://docs.grafana.org/administration/provisioning/#datasources?utm_source=explore"
         target="_blank"
-        rel="noopener"
+        rel="noreferrer"
         className="text-link"
       >
         Learn more

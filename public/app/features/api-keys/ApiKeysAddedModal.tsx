@@ -29,14 +29,14 @@ export const ApiKeysAddedModal = (props: Props) => {
         </div>
 
         <div className="grafana-info-box" style={{ border: 0 }}>
-          You will only be able to view this key here once! It is not stored in this form. So be sure to copy it now.
+          You will only be able to view this key here once! It is not stored in this form, so be sure to copy it now.
           <br />
           <br />
-          You can authenticate request using the Authorization HTTP header, example:
+          You can authenticate a request using the Authorization HTTP header, example:
           <br />
           <br />
           <pre className="small">
-            curl -H "Authorization: Bearer {props.apiKey}" {props.rootPath}/api/dashboards/home
+            curl -H &quot;Authorization: Bearer {props.apiKey}&quot; {props.rootPath}/api/dashboards/home
           </pre>
         </div>
       </div>

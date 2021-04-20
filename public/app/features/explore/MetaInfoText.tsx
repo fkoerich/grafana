@@ -1,5 +1,5 @@
 import React, { memo, useContext } from 'react';
-import { css } from 'emotion';
+import { css } from '@emotion/css';
 import { GrafanaTheme } from '@grafana/data';
 import { stylesFactory, ThemeContext } from '@grafana/ui';
 
@@ -15,6 +15,10 @@ const getStyles = stylesFactory((theme: GrafanaTheme) => ({
     margin-right: ${theme.spacing.d};
     display: flex;
     align-items: baseline;
+
+    .logs-meta-item__error {
+      color: ${theme.palette.red};
+    }
   `,
   metaLabel: css`
     margin-right: calc(${theme.spacing.d} / 2);
@@ -28,7 +32,7 @@ const getStyles = stylesFactory((theme: GrafanaTheme) => ({
 
 export interface MetaItemProps {
   label?: string;
-  value: string;
+  value: string | JSX.Element;
 }
 
 export const MetaInfoItem = memo(function MetaInfoItem(props: MetaItemProps) {

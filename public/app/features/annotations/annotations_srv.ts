@@ -2,16 +2,34 @@
 import flattenDeep from 'lodash/flattenDeep';
 import cloneDeep from 'lodash/cloneDeep';
 // Components
-import './editor_ctrl';
 import coreModule from 'app/core/core_module';
 // Utils & Services
 import { dedupAnnotations } from './events_processing';
 // Types
-import { DashboardModel, PanelModel } from '../dashboard/state';
-import { AnnotationEvent, AppEvents, DataSourceApi, PanelEvents, TimeRange } from '@grafana/data';
+import { DashboardModel } from '../dashboard/state';
+import {
+  AnnotationEvent,
+  AppEvents,
+  CoreApp,
+  DataQueryRequest,
+  DataSourceApi,
+  rangeUtil,
+  ScopedVars,
+} from '@grafana/data';
 import { getBackendSrv, getDataSourceSrv } from '@grafana/runtime';
 import { appEvents } from 'app/core/core';
 import { getTimeSrv } from '../dashboard/services/TimeSrv';
+import { Observable, of } from 'rxjs';
+import { map, mergeMap } from 'rxjs/operators';
+import { AnnotationQueryOptions, AnnotationQueryResponse } from './types';
+import { standardAnnotationSupport } from './standardAnnotationSupport';
+import { runRequest } from '../query/state/runRequest';
+import { RefreshEvent } from 'app/types/events';
+
+let counter = 100;
+function getNextRequestId() {
+  return 'AQ' + counter++;
+}
 
 export class AnnotationsSrv {
   globalAnnotationsPromise: any;
@@ -22,7 +40,7 @@ export class AnnotationsSrv {
     // always clearPromiseCaches when loading new dashboard
     this.clearPromiseCaches();
     // clear promises on refresh events
-    dashboard.on(PanelEvents.refresh, this.clearPromiseCaches.bind(this));
+    dashboard.events.subscribe(RefreshEvent, this.clearPromiseCaches.bind(this));
   }
 
   clearPromiseCaches() {
@@ -31,17 +49,17 @@ export class AnnotationsSrv {
     this.datasourcePromises = null;
   }
 
-  getAnnotations(options: { dashboard: DashboardModel; panel: PanelModel; range: TimeRange }) {
+  getAnnotations(options: AnnotationQueryOptions) {
     return Promise.all([this.getGlobalAnnotations(options), this.getAlertStates(options)])
-      .then(results => {
+      .then((results) => {
         // combine the annotations and flatten results
         let annotations: AnnotationEvent[] = flattenDeep(results[0]);
-        // when in edit mode we need to use this function to get the saved id
+        // when in edit mode we need to use this function to get the saved ID
         let panelFilterId = options.panel.getSavedId();
 
         // filter out annotations that do not belong to requesting panel
-        annotations = annotations.filter(item => {
-          // if event has panel id and query is of type dashboard then panel and requesting panel id must match
+        annotations = annotations.filter((item) => {
+          // if event has panel ID and query is of type dashboard then panel and requesting panel ID must match
           if (item.panelId && item.source.type === 'dashboard') {
             return item.panelId === panelFilterId;
           }
@@ -58,7 +76,7 @@ export class AnnotationsSrv {
           alertState: alertState,
         };
       })
-      .catch(err => {
+      .catch((err) => {
         if (err.cancelled) {
           return [];
         }
@@ -102,7 +120,7 @@ export class AnnotationsSrv {
     return this.alertStatesPromise;
   }
 
-  getGlobalAnnotations(options: { dashboard: DashboardModel; panel: PanelModel; range: TimeRange }) {
+  getGlobalAnnotations(options: AnnotationQueryOptions) {
     const dashboard = options.dashboard;
 
     if (this.globalAnnotationsPromise) {
@@ -126,18 +144,23 @@ export class AnnotationsSrv {
       promises.push(
         datasourcePromise
           .then((datasource: DataSourceApi) => {
-            if (!datasource.annotationQuery) {
-              return [];
+            // Use the legacy annotationQuery unless annotation support is explicitly defined
+            if (datasource.annotationQuery && !datasource.annotations) {
+              return datasource.annotationQuery({
+                range,
+                rangeRaw: range.raw,
+                annotation: annotation,
+                dashboard: dashboard,
+              });
             }
-
-            return datasource.annotationQuery({
-              range,
-              rangeRaw: range.raw,
-              annotation: annotation,
-              dashboard: dashboard,
-            });
+            // Note: future annotation lifecycle will use observables directly
+            return executeAnnotationQuery(options, datasource, annotation)
+              .toPromise()
+              .then((res) => {
+                return res.events ?? [];
+              });
           })
-          .then(results => {
+          .then((results) => {
             // store response in annotation object if this is a snapshot call
             if (dashboard.snapshot) {
               annotation.snapshotData = cloneDeep(results);
@@ -179,11 +202,75 @@ export class AnnotationsSrv {
 
     for (const item of results) {
       item.source = annotation;
+      item.color = annotation.iconColor;
+      item.type = annotation.name;
       item.isRegion = item.timeEnd && item.time !== item.timeEnd;
     }
 
     return results;
   }
+}
+
+export function executeAnnotationQuery(
+  options: AnnotationQueryOptions,
+  datasource: DataSourceApi,
+  savedJsonAnno: any
+): Observable<AnnotationQueryResponse> {
+  const processor = {
+    ...standardAnnotationSupport,
+    ...datasource.annotations,
+  };
+
+  const annotation = processor.prepareAnnotation!(savedJsonAnno);
+  if (!annotation) {
+    return of({});
+  }
+
+  const query = processor.prepareQuery!(annotation);
+  if (!query) {
+    return of({});
+  }
+
+  // No more points than pixels
+  const maxDataPoints = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+
+  // Add interval to annotation queries
+  const interval = rangeUtil.calculateInterval(options.range, maxDataPoints, datasource.interval);
+
+  const scopedVars: ScopedVars = {
+    __interval: { text: interval.interval, value: interval.interval },
+    __interval_ms: { text: interval.intervalMs.toString(), value: interval.intervalMs },
+    __annotation: { text: annotation.name, value: annotation },
+  };
+
+  const queryRequest: DataQueryRequest = {
+    startTime: Date.now(),
+    requestId: getNextRequestId(),
+    range: options.range,
+    maxDataPoints,
+    scopedVars,
+    ...interval,
+    app: CoreApp.Dashboard,
+
+    timezone: options.dashboard.timezone,
+
+    targets: [
+      {
+        ...query,
+        refId: 'Anno',
+      },
+    ],
+  };
+
+  return runRequest(datasource, queryRequest).pipe(
+    mergeMap((panelData) => {
+      if (!panelData.series) {
+        return of({ panelData, events: [] });
+      }
+
+      return processor.processEvents!(annotation, panelData.series).pipe(map((events) => ({ panelData, events })));
+    })
+  );
 }
 
 coreModule.service('annotationsSrv', AnnotationsSrv);

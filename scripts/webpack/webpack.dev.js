@@ -8,11 +8,12 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const getBabelConfig = require('./babel.config');
 // const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 module.exports = (env = {}) =>
   merge(common, {
-    devtool: 'cheap-module-source-map',
+    devtool: 'inline-source-map',
     mode: 'development',
 
     entry: {
@@ -35,43 +36,7 @@ module.exports = (env = {}) =>
           use: [
             {
               loader: 'babel-loader',
-              options: {
-                cacheDirectory: true,
-                babelrc: false,
-                // Note: order is top-to-bottom and/or left-to-right
-                plugins: [
-                  [
-                    require('@rtsao/plugin-proposal-class-properties'),
-                    {
-                      loose: true,
-                    },
-                  ],
-                  '@babel/plugin-proposal-nullish-coalescing-operator',
-                  '@babel/plugin-proposal-optional-chaining',
-                  'angularjs-annotate',
-                ],
-                // Note: order is bottom-to-top and/or right-to-left
-                presets: [
-                  [
-                    '@babel/preset-env',
-                    {
-                      targets: {
-                        browsers: 'last 3 versions',
-                      },
-                      useBuiltIns: 'entry',
-                      corejs: 3,
-                      modules: false,
-                    },
-                  ],
-                  [
-                    '@babel/preset-typescript',
-                    {
-                      allowNamespaces: true,
-                    },
-                  ],
-                  '@babel/preset-react',
-                ],
-              },
+              options: getBabelConfig({ BABEL_ENV: 'dev' }),
             },
           ],
         },
@@ -89,21 +54,15 @@ module.exports = (env = {}) =>
         : new ForkTsCheckerWebpackPlugin({
             eslint: {
               enabled: true,
-              files: [
-                'public/app/**/*.{ts,tsx}',
-                // this can't be written like this packages/**/src/**/*.ts because it throws an error
-                'packages/grafana-ui/src/**/*.{ts,tsx}',
-                'packages/grafana-data/src/**/*.{ts,tsx}',
-                'packages/grafana-runtime/src/**/*.{ts,tsx}',
-                'packages/grafana-e2e-selectors/src/**/*.{ts,tsx}',
-                'packages/jaeger-ui-components/src/**/*.{ts,tsx}',
-              ],
+              files: ['public/app/**/*.{ts,tsx}', 'packages/*/src/**/*.{ts,tsx}'],
               options: {
                 cache: true,
               },
+              memoryLimit: 4096,
             },
             typescript: {
               mode: 'write-references',
+              memoryLimit: 4096,
               diagnosticOptions: {
                 semantic: true,
                 syntactic: true,
